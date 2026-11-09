@@ -46,5 +46,29 @@ namespace Voxels
 
             return normalization > 0f ? sum / normalization : 0f;
         }
+
+        /// <summary>Трёхмерный fBm — используется для поля плотности.</summary>
+        public static float Fbm3(float3 p, int octaves, float lacunarity = 2f, float gain = 0.5f, float offset = 0f)
+        {
+            float sum = 0f;
+            float amplitude = 1f;
+            float frequency = 1f;
+            float normalization = 0f;
+
+            for (int i = 0; i < octaves; i++)
+            {
+                var q = new float3(
+                    p.x * frequency,
+                    p.y * frequency,
+                    p.z * frequency + offset + i * 17.31f);
+
+                sum += amplitude * noise.cnoise(q);
+                normalization += amplitude;
+                amplitude *= gain;
+                frequency *= lacunarity;
+            }
+
+            return normalization > 0f ? sum / normalization : 0f;
+        }
     }
 }

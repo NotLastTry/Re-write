@@ -1,4 +1,6 @@
 using System.Threading.Tasks;
+using Unity.Collections;
+using Unity.Jobs;
 using Unity.Mathematics;
 
 namespace Voxels
@@ -11,6 +13,9 @@ namespace Voxels
     public sealed class CaveGenerator
     {
         public bool Enabled = true;
+
+        /// <summary>Считать затравку и автомат Burst-джобами.</summary>
+        public bool UseJobs = true;
 
         /// <summary>Размер ячейки CA в блоках (1, 2, 4, 8, 16).</summary>
         public int CellSize = 2;
@@ -61,11 +66,19 @@ namespace Voxels
             int gy = cellsY + pad * 2;
             int gz = cellsZ + pad * 2;
 
-            var current = new byte[gx * gy * gz];
-            var next = new byte[current.Length];
-
             int cellOriginX = chunkX * cellsX;
             int cellOriginZ = chunkZ * cellsZ;
+
+            byte[] current;
+
+            if (UseJobs)
+            {
+                current = BuildCaveGridJobs(gx, gy, gz, pad, cell, cellOriginX, cellOriginZ);
+            }
+            else
+            {
+                current = new byte[gx * gy * gz];
+                var next = new byte[current.Length];
 
             // Заполнение: вне пещерных зон — сплошной камень,
             // внутри зоны — случайный шум, который сгладит автомат.
@@ -140,6 +153,7 @@ namespace Voxels
                 current = next;
                 next = swap;
             }
+            }
 
             RemoveFloatingIslands(current, gx, gy, gz, pad, 1);
 
@@ -173,6 +187,69 @@ namespace Voxels
                         target[voxelIndex] = BlockType.Air;
                 }
             });
+        }
+
+        byte[] BuildCaveGridJobs(int gx, int gy, int gz, int pad, int cell, int cellOriginX, int cellOriginZ)
+        {
+            int length = gx * gy * gz;
+
+            var current = new NativeArray<byte>(length, Allocator.TempJob);
+            var next = new NativeArray<byte>(length, Allocator.TempJob);
+
+            try
+            {
+                var seed = new CaveSeedJob
+                {
+                    Gx = gx,
+                    Gy = gy,
+                    Gz = gz,
+                    Pad = pad,
+                    CellSize = cell,
+                    CellOriginX = cellOriginX,
+                    CellOriginZ = cellOriginZ,
+                    RegionScale = RegionScale,
+                    RegionThreshold = RegionThreshold,
+                    Fill = Fill,
+                    Seed = Seed,
+                    Grid = current
+                };
+
+                seed.Schedule(length, 128).Complete();
+
+                int rows = (gy - 2) * (gz - 2);
+
+                for (int iteration = 0; iteration < Iterations; iteration++)
+                {
+                    for (int i = 0; i < length; i++)
+                        next[i] = current[i];
+
+                    var step = new CaveStepJob
+                    {
+                        Gx = gx,
+                        Gy = gy,
+                        Gz = gz,
+                        SolidThreshold = SolidThreshold,
+                        AirThreshold = AirThreshold,
+                        Current = current,
+                        Next = next
+                    };
+
+                    step.Schedule(rows, 16).Complete();
+
+                    NativeArray<byte> swap = current;
+                    current = next;
+                    next = swap;
+                }
+
+                var result = new byte[length];
+                current.CopyTo(result);
+                return result;
+            }
+            finally
+            {
+                current.Dispose();
+                next.Dispose();
+            }
         }
 
         static float Sample(byte[] grid, int gx, int gy, int gz, int pad, int cell, int x, int y, int z)

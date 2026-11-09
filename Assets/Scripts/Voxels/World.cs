@@ -14,10 +14,15 @@ namespace Voxels
             // Пещеры должны зависеть от сида мира, иначе при смене сида
             // рельеф новый, а рисунок пещер остаётся прежним.
             Caves.Seed = unchecked((uint)Generator.Seed);
+            Density.Configure(Generator.GetParams());
         }
 
         public TerrainGenerator Generator { get; }
         public CaveGenerator Caves { get; } = new CaveGenerator();
+        public DensityGenerator Density { get; } = new DensityGenerator();
+
+        /// <summary>Режим 3D-плотности вместо карты высот.</summary>
+        public bool UseDensity;
         public IReadOnlyDictionary<ChunkId, Chunk> Chunks => _chunks;
         public int ChunkCount => _chunks.Count;
 
@@ -43,7 +48,6 @@ namespace Voxels
 
             var heights = new short[VoxelConstants.ChunkSize * VoxelConstants.ChunkSize];
             var biomes = new byte[VoxelConstants.ChunkSize * VoxelConstants.ChunkSize];
-            Generator.FillColumnHeights(chunkX, chunkZ, heights, biomes);
 
             var column = new Chunk[VoxelConstants.ChunksInHeight];
             var voxels = new ushort[VoxelConstants.ChunksInHeight][];
@@ -57,11 +61,27 @@ namespace Voxels
 
                 var chunk = gameObject.AddComponent<Chunk>();
                 chunk.Initialize(id);
-                chunk.HasBlocks = Generator.FillChunkFromHeights(id, heights, biomes, chunk.Voxels);
+                chunk.HasBlocks = false;
 
                 voxels[chunkY] = chunk.Voxels;
                 _chunks[id] = chunk;
                 column[chunkY] = chunk;
+            }
+
+            if (UseDensity)
+            {
+                Density.FillColumn(chunkX, chunkZ, voxels, heights, biomes);
+            }
+            else
+            {
+                Generator.FillColumnHeights(chunkX, chunkZ, heights, biomes);
+
+                for (int chunkY = 0; chunkY < column.Length; chunkY++)
+                {
+                    var id = new ChunkId(chunkX, chunkY, chunkZ);
+                    column[chunkY].HasBlocks =
+                        Generator.FillChunkFromHeights(id, heights, biomes, voxels[chunkY]);
+                }
             }
 
             // Вырезаем пещеры во всех четырёх чанках колонки сразу.
@@ -127,6 +147,7 @@ namespace Voxels
             }
 
             Generator.ForgetColumn(chunkX, chunkZ);
+            Density.ForgetColumn(chunkX, chunkZ);
 
             // У соседей могли быть нарисованы грани в сторону выгруженной колонки.
             if (rebuildNeighbours)
@@ -153,8 +174,12 @@ namespace Voxels
                     z & VoxelConstants.ChunkMask];
             }
 
-            return Generator.GetBlock(x, y, z);
+            return UseDensity ? Density.GetBlock(x, y, z) : Generator.GetBlock(x, y, z);
         }
+
+        /// <summary>Высота поверхности для спавна и отладки.</summary>
+        public int GetSurfaceHeight(int x, int z)
+            => UseDensity ? Density.GetSurfaceHeight(x, z) : Generator.GetSurfaceHeight(x, z);
 
         public void SetBlock(int x, int y, int z, ushort block)
         {

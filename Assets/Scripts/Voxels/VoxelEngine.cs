@@ -8,6 +8,19 @@ namespace Voxels
         [Header("Мир")]
         [SerializeField] int _seed = 1337;
 
+        [Header("Генерация")]
+        [Tooltip("3D-плотность вместо карты высот: нависания и карнизы")]
+        [SerializeField] bool _useDensity = true;
+
+        [Tooltip("Амплитуда 3D-шума, блоков")]
+        [SerializeField, Range(0f, 30f)] float _densityAmplitude = 10f;
+
+        [Tooltip("Горизонтальная частота 3D-шума")]
+        [SerializeField, Range(0.002f, 0.05f)] float _densityFrequency = 0.012f;
+
+        [Tooltip("Вертикальная частота 3D-шума")]
+        [SerializeField, Range(0.005f, 0.06f)] float _densityVerticalFrequency = 0.02f;
+
         [Header("Стриминг")]
         [Tooltip("Радиус загруженных колонок вокруг цели")]
         [SerializeField] int _viewRadius = 3;
@@ -53,6 +66,10 @@ namespace Voxels
 
         [Tooltip("Порог маски обрывов: выше — плато приподнято")]
         [SerializeField, Range(0f, 1f)] float _cliffThreshold = 0.25f;
+
+        [Header("Производительность")]
+        [Tooltip("Считать высоты и пещеры Burst-джобами (выключить для сравнения)")]
+        [SerializeField] bool _useJobs = true;
 
         [Header("Отладка")]
         [Tooltip("Перестраивать мир при изменении ползунков в Play Mode")]
@@ -291,11 +308,19 @@ namespace Voxels
             if (CurrentWorld == null)
                 return;
 
+            CurrentWorld.UseDensity = _useDensity;
+            CurrentWorld.Density.Amplitude = _densityAmplitude;
+            CurrentWorld.Density.Frequency = _densityFrequency;
+            CurrentWorld.Density.VerticalFrequency = _densityVerticalFrequency;
+
             CurrentWorld.Caves.Enabled = _cavesEnabled;
             CurrentWorld.Caves.Iterations = _caveIterations;
             CurrentWorld.Caves.Fill = _caveFill;
             CurrentWorld.Caves.SurfaceMargin = _caveSurfaceMargin;
             CurrentWorld.Caves.RegionThreshold = _caveZoneThreshold;
+            CurrentWorld.Caves.UseJobs = _useJobs;
+
+            CurrentWorld.Generator.UseJobs = _useJobs;
 
             CurrentWorld.Generator.CliffsEnabled = _cliffsEnabled;
             CurrentWorld.Generator.CliffIterations = _cliffIterations;
@@ -303,6 +328,9 @@ namespace Voxels
             CurrentWorld.Generator.CliffMaxSlope = _cliffMaxSlope;
             CurrentWorld.Generator.CliffUplift = _cliffUplift;
             CurrentWorld.Generator.CliffThreshold = _cliffThreshold;
+
+            // Плотность использует климат генератора, поэтому обновляем его после смены настроек.
+            CurrentWorld.Density.Configure(CurrentWorld.Generator.GetParams());
 
             CurrentWorld.Generator.DebugSlope = _debugSlope;
             CurrentWorld.Generator.DebugSlopeThreshold = _debugSlopeThreshold;
@@ -344,7 +372,7 @@ namespace Voxels
                 return;
 
             Vector3 position = _target.position;
-            int surface = CurrentWorld.Generator.GetSurfaceHeight(
+            int surface = CurrentWorld.GetSurfaceHeight(
                 Mathf.FloorToInt(position.x),
                 Mathf.FloorToInt(position.z));
 

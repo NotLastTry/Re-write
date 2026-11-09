@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Unity.Collections;
+using Unity.Jobs;
 using Unity.Mathematics;
 
 namespace Voxels
@@ -51,6 +53,12 @@ namespace Voxels
 
         public int Seed { get; }
 
+        /// <summary>Параметры климата для 3D-режима и других подсистем.</summary>
+        public TerrainParams GetParams() => CreateParams();
+
+        /// <summary>Считать высоты и осыпь Burst-джобами (быстрее в разы).</summary>
+        public bool UseJobs = true;
+
         // --- настройки обрывов ---
 
         public bool CliffsEnabled = true;
@@ -94,36 +102,26 @@ namespace Voxels
 
         /// <summary>Начальная высота поверхности (до осыпи) в мировых координатах.</summary>
         public float GetHeight(float worldX, float worldZ)
+            => TerrainMath.Height(worldX, worldZ, CreateParams());
+
+        TerrainParams CreateParams()
         {
-            float2 p = new float2(worldX, worldZ);
-
-            float2 warp = new float2(
-                Noise.Fbm(p * 0.006f, 3, 2f, 0.5f, _seedWarpX),
-                Noise.Fbm(p * 0.006f, 3, 2f, 0.5f, _seedWarpZ));
-            p += warp * 14f;
-
-            float continents = Noise.Fbm(p * 0.0035f, 5, 2.03f, 0.5f, _seedContinent);
-
-            float mountainMask = math.saturate(
-                Noise.Fbm(p * 0.0022f, 3, 2f, 0.5f, _seedMountain) * 0.5f + 0.5f);
-            mountainMask *= mountainMask;
-
-            float ridges = Noise.Ridged(p * 0.008f, 4, _seedRidge);
-
-            float height = VoxelConstants.SeaLevel + 6f
-                         + continents * 18f
-                         + ridges * 52f * mountainMask;
-
-            height = Terrace(height, 7f);
-
-            // Структурные обрывы: там, где маска выше порога, рельеф поднимается
-            // на CliffUplift блоков. Кромка плато получается почти отвесной,
-            // а осыпь потом формирует у подножия конус.
-            float cliffMask = Noise.Fbm(p * 0.006f, 2, 2f, 0.5f, _seedCliff);
-            if (cliffMask > CliffThreshold)
-                height += CliffUplift;
-
-            return math.clamp(height, 4f, VoxelConstants.WorldHeight - 6f);
+            return new TerrainParams
+            {
+                SeedContinent = _seedContinent,
+                SeedMountain = _seedMountain,
+                SeedRidge = _seedRidge,
+                SeedWarpX = _seedWarpX,
+                SeedWarpZ = _seedWarpZ,
+                SeedCliff = _seedCliff,
+                SeedRock = _seedRock,
+                SeedTemperature = _seedTemperature,
+                SeedHumidity = _seedHumidity,
+                CliffUplift = CliffUplift,
+                CliffThreshold = CliffThreshold,
+                SeaLevel = VoxelConstants.SeaLevel,
+                SnowLine = VoxelConstants.SnowLine
+            };
         }
 
         /// <summary>
@@ -148,12 +146,109 @@ namespace Voxels
         /// <summary>Считает высоты колонки с осыпью и кладёт их в массивы чанка.</summary>
         public void FillColumnHeights(int chunkX, int chunkZ, short[] heights, byte[] biomes)
         {
-            short[] column = ComputeColumnHeights(chunkX, chunkZ);
-            System.Array.Copy(column, heights, column.Length);
-            CacheColumn(chunkX, chunkZ, column, biomes);
+            if (UseJobs)
+                FillColumnHeightsJobs(chunkX, chunkZ, heights, biomes);
+            else
+                FillColumnHeightsManaged(chunkX, chunkZ, heights, biomes);
+
+            CacheColumn(chunkX, chunkZ, heights, biomes);
 
             if (DebugSlope)
-                CountSteepCells(column);
+                CountSteepCells(heights);
+        }
+
+        void FillColumnHeightsManaged(int chunkX, int chunkZ, short[] heights, byte[] biomes)
+        {
+            short[] column = ComputeColumnHeights(chunkX, chunkZ);
+            System.Array.Copy(column, heights, column.Length);
+
+            const int size = VoxelConstants.ChunkSize;
+            int originX = chunkX * size;
+            int originZ = chunkZ * size;
+
+            for (int z = 0; z < size; z++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    int index = z * size + x;
+                    biomes[index] = ComputeBiome(heights[index], originX + x, originZ + z);
+                }
+            }
+        }
+
+        void FillColumnHeightsJobs(int chunkX, int chunkZ, short[] heights, byte[] biomes)
+        {
+            const int size = VoxelConstants.ChunkSize;
+            int originX = chunkX * size;
+            int originZ = chunkZ * size;
+
+            int iterations = CliffsEnabled ? math.clamp(CliffIterations, 0, 8) : 0;
+            int pad = iterations == 0 ? 0 : iterations + 2;
+            int grid = size + pad * 2;
+
+            var heightGrid = new NativeArray<float>(grid * grid, Allocator.TempJob);
+            var scratch = new NativeArray<float>(grid * grid, Allocator.TempJob);
+            var hardness = new NativeArray<float>(grid * grid, Allocator.TempJob);
+            var resultHeights = new NativeArray<short>(size * size, Allocator.TempJob);
+            var resultBiomes = new NativeArray<byte>(size * size, Allocator.TempJob);
+
+            try
+            {
+                var fieldJob = new HeightFieldJob
+                {
+                    Params = CreateParams(),
+                    Grid = grid,
+                    Pad = pad,
+                    OriginX = originX,
+                    OriginZ = originZ,
+                    Heights = heightGrid,
+                    Hardness = hardness
+                };
+
+                fieldJob.Schedule(grid * grid, 64).Complete();
+
+                if (iterations > 0)
+                {
+                    var erosion = new CliffErosionJob
+                    {
+                        Grid = grid,
+                        Iterations = iterations,
+                        MaxSlope = math.max(0.1f, CliffMaxSlope),
+                        Strength = math.saturate(CliffStrength),
+                        Heights = heightGrid,
+                        Scratch = scratch,
+                        Hardness = hardness
+                    };
+
+                    erosion.Schedule().Complete();
+                }
+
+                var result = new ColumnResultJob
+                {
+                    Params = CreateParams(),
+                    Grid = grid,
+                    Pad = pad,
+                    Size = size,
+                    OriginX = originX,
+                    OriginZ = originZ,
+                    Heights = heightGrid,
+                    ResultHeights = resultHeights,
+                    ResultBiomes = resultBiomes
+                };
+
+                result.Schedule(size * size, 64).Complete();
+
+                resultHeights.CopyTo(heights);
+                resultBiomes.CopyTo(biomes);
+            }
+            finally
+            {
+                heightGrid.Dispose();
+                scratch.Dispose();
+                hardness.Dispose();
+                resultHeights.Dispose();
+                resultBiomes.Dispose();
+            }
         }
 
         void CountSteepCells(short[] column)
@@ -320,11 +415,9 @@ namespace Voxels
                 {
                     long key = ((long)(originX + x) << 32) ^ (uint)(originZ + z);
                     int height = column[z * size + x];
+                    byte biome = biomes[z * size + x];
 
                     _heightCache[key] = (short)height;
-
-                    byte biome = ComputeBiome(height, originX + x, originZ + z);
-                    biomes[z * size + x] = biome;
                     _biomeCache[key] = biome;
                     BiomeCells[biome]++;
                 }
@@ -426,32 +519,7 @@ namespace Voxels
         /// вершины остаются горами независимо от климата.
         /// </summary>
         byte ComputeBiome(int height, int worldX, int worldZ)
-        {
-            if (height <= VoxelConstants.SeaLevel + 2)
-                return (byte)Biome.Beach;
-
-            if (height >= VoxelConstants.SnowLine - 8)
-                return (byte)Biome.Mountains;
-
-            float temperature = Noise.Fbm(
-                new float2(worldX * 0.0015f, worldZ * 0.0015f),
-                2, 2f, 0.5f, _seedTemperature);
-
-            float humidity = Noise.Fbm(
-                new float2(worldX * 0.002f, worldZ * 0.002f),
-                2, 2f, 0.5f, _seedHumidity);
-
-            if (temperature < -0.3f)
-                return (byte)Biome.Tundra;
-
-            if (humidity < -0.25f)
-                return (byte)Biome.Desert;
-
-            if (humidity > 0.15f)
-                return (byte)Biome.Forest;
-
-            return (byte)Biome.Plains;
-        }
+            => TerrainMath.SelectBiome(height, worldX, worldZ, CreateParams());
 
         /// <summary>Убирает колонку из кэша при выгрузке чанков.</summary>
         public void ForgetColumn(int chunkX, int chunkZ)
@@ -519,10 +587,6 @@ namespace Voxels
 
         /// <summary>Квантование высоты по ступеням с плавным переходом — основа обрывов.</summary>
         static float Terrace(float height, float step)
-        {
-            float steps = height / step;
-            float fraction = steps - math.floor(steps);
-            return (math.floor(steps) + math.smoothstep(0.35f, 0.65f, fraction)) * step;
-        }
+            => TerrainMath.Terrace(height, step);
     }
 }
