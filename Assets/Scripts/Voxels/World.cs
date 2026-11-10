@@ -14,7 +14,7 @@ namespace Voxels
             // Пещеры должны зависеть от сида мира, иначе при смене сида
             // рельеф новый, а рисунок пещер остаётся прежним.
             Caves.Seed = unchecked((uint)Generator.Seed);
-            Density.Configure(Generator.GetParams());
+            Density.Configure(Generator.GetParams(), Generator.Seed);
         }
 
         public TerrainGenerator Generator { get; }

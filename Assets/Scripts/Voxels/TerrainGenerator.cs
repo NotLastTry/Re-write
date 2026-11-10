@@ -445,26 +445,41 @@ namespace Voxels
                 for (int z = 0; z < size; z++)
                 {
                     int height = heights[z * size + x];
-                    if (height < originY)
-                        continue;
-
                     byte biome = biomes[z * size + x];
-                    int slope = DebugSlope ? SlopeAt(heights, x, z) : 0;
-                    bool markCliff = DebugSlope && slope >= DebugSlopeThreshold;
 
-                    int maxLocalY = math.min(size - 1, height - originY);
-                    for (int y = 0; y <= maxLocalY; y++)
+                    if (height >= originY)
                     {
-                        int worldY = originY + y;
-                        ushort block = BlockAt(worldY, height, biome);
+                        int slope = DebugSlope ? SlopeAt(heights, x, z) : 0;
+                        bool markCliff = DebugSlope && slope >= DebugSlopeThreshold;
 
-                        if (markCliff && worldY >= height - 2)
-                            block = BlockType.Debug;
+                        int maxLocalY = math.min(size - 1, height - originY);
+                        for (int y = 0; y <= maxLocalY; y++)
+                        {
+                            int worldY = originY + y;
+                            ushort block = BlockAt(worldY, height, biome);
 
-                        voxels[(x * size + y) * size + z] = block;
+                            if (markCliff && worldY >= height - 2)
+                                block = BlockType.Debug;
+
+                            voxels[(x * size + y) * size + z] = block;
+                        }
+
+                        hasBlocks = true;
                     }
 
-                    hasBlocks = true;
+                    // Вода до уровня моря: заполняем воздух над поверхностью.
+                    int seaLocal = VoxelConstants.SeaLevel - originY;
+                    if (seaLocal >= 0)
+                    {
+                        int from = math.max(0, height + 1 - originY);
+                        int to = math.min(size - 1, seaLocal);
+
+                        for (int y = from; y <= to; y++)
+                            voxels[(x * size + y) * size + z] = BlockType.Water;
+
+                        if (to >= from)
+                            hasBlocks = true;
+                    }
                 }
             }
 
@@ -498,7 +513,14 @@ namespace Voxels
             if (worldY >= VoxelConstants.WorldHeight)
                 return BlockType.Air;
 
-            return BlockAt(worldY, GetSurfaceHeight(worldX, worldZ), GetBiome(worldX, worldZ));
+            ushort block = BlockAt(worldY, GetSurfaceHeight(worldX, worldZ), GetBiome(worldX, worldZ));
+
+            // Для незагруженных колонок считаем уровень моря водой:
+            // иначе на границе стриминга рисуются вертикальные «стены» воды.
+            if (block == BlockType.Air && worldY <= VoxelConstants.SeaLevel)
+                return BlockType.Water;
+
+            return block;
         }
 
         /// <summary>Биом колонки. Считается один раз на колонку и кэшируется.</summary>

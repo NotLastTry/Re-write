@@ -29,13 +29,47 @@ namespace Voxels
                 return;
             }
 
-            if (camera.GetComponent<FlyCamera>() == null)
+            if (camera.GetComponent<UnderwaterEffect>() == null)
+                camera.gameObject.AddComponent<UnderwaterEffect>();
+
+            PlayerController player = camera.GetComponentInParent<PlayerController>();
+
+            if (player == null)
             {
-                camera.gameObject.AddComponent<FlyCamera>();
-                camera.transform.SetPositionAndRotation(
-                    new Vector3(0f, 100f, -70f),
-                    Quaternion.Euler(15f, 0f, 0f));
+                // Старый режим без префаба: летающая камера и телепорт в точку обзора.
+                if (camera.GetComponent<FlyCamera>() == null)
+                {
+                    camera.gameObject.AddComponent<FlyCamera>();
+                    camera.transform.SetPositionAndRotation(
+                        new Vector3(0f, 100f, -70f),
+                        Quaternion.Euler(15f, 0f, 0f));
+                }
+
+                var playerObject = new GameObject("Player");
+                playerObject.transform.position = camera.transform.position;
+
+                var controller = playerObject.AddComponent<CharacterController>();
+                controller.height = 1.8f;
+                controller.radius = 0.35f;
+                controller.center = new Vector3(0f, 0.9f, 0f);
+
+                player = playerObject.AddComponent<PlayerController>();
+                player.CameraTransform = camera.transform;
+
+                camera.transform.SetParent(playerObject.transform, false);
+                camera.transform.localPosition = new Vector3(0f, 1.6f, 0f);
+                camera.transform.localRotation = Quaternion.identity;
             }
+            else
+            {
+                // Игрок уже из префаба: FlyCamera не нужна.
+                var fly = camera.GetComponent<FlyCamera>();
+                if (fly != null)
+                    fly.enabled = false;
+            }
+
+            if (camera.GetComponent<BlockInteraction>() == null)
+                camera.gameObject.AddComponent<BlockInteraction>();
         }
     }
 }

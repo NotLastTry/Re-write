@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Voxels
 {
@@ -39,7 +40,10 @@ namespace Voxels
         /// <summary>Трава лесного биома — темнее обычной.</summary>
         public const ushort ForestGrass = 7;
 
-        public const int Count = 8;
+        /// <summary>Вода: пока непрозрачный блок, отдельный материал.</summary>
+        public const ushort Water = 8;
+
+        public const int Count = 9;
 
         public static bool IsSolid(ushort block) => block != Air;
 
@@ -55,6 +59,7 @@ namespace Voxels
                 case Snow: return "Snow";
                 case Debug: return "Debug";
                 case ForestGrass: return "ForestGrass";
+                case Water: return "Water";
                 default: return "Unknown";
             }
         }
@@ -70,6 +75,7 @@ namespace Voxels
                 case Snow: return new Color(0.92f, 0.94f, 0.98f);
                 case Debug: return new Color(1f, 0f, 1f);
                 case ForestGrass: return new Color(0.16f, 0.34f, 0.12f);
+                case Water: return new Color(0.10f, 0.30f, 0.55f);
                 default: return Color.magenta;
             }
         }
@@ -85,37 +91,98 @@ namespace Voxels
         static Material[] _cache;
         static bool _vertexColor;
 
+        /// <summary>Альфа воды; задаётся из инспектора VoxelEngine.</summary>
+        public static float WaterAlpha = 0.35f;
+
+        /// <summary>Гладкость воды: низкая — меньше зеркального блеска неба сверху.</summary>
+        public static float WaterSmoothness = 0.25f;
+
+        /// <summary>Готовый ассет материала воды (HDRP/Lit Transparent). Если задан — используется он.</summary>
+        public static Material WaterOverride;
+
+        public static void ApplyWaterMaterial(Material material)
+        {
+            WaterOverride = material;
+
+            if (_cache == null || _cache.Length <= BlockType.Water)
+                return;
+
+            if (material != null)
+                _cache[BlockType.Water] = material;
+        }
+
         /// <summary>Текущий шейдер поддерживает вершинные цвета (AO).</summary>
         public static bool VertexColorSupported => _vertexColor;
+
+        /// <summary>Обновляет альфу уже созданного материала воды (без пересоздания мира).</summary>
+        public static void ApplyWaterAlpha(float alpha)
+        {
+            WaterAlpha = Mathf.Clamp01(alpha);
+
+            if (_cache == null || _cache.Length <= BlockType.Water)
+                return;
+
+            Material water = WaterOverride;
+
+            if (water == null)
+            {
+                if (_cache == null || _cache.Length <= BlockType.Water)
+                    return;
+
+                water = _cache[BlockType.Water];
+            }
+
+            if (water == null || !water.HasProperty("_BaseColor"))
+                return;
+
+            Color color = water.GetColor("_BaseColor");
+            color.a = WaterAlpha;
+            water.SetColor("_BaseColor", color);
+
+            if (water.HasProperty("_Smoothness"))
+                water.SetFloat("_Smoothness", WaterSmoothness);
+        }
 
         public static Material[] Get()
         {
             if (_cache != null)
                 return _cache;
 
-            Shader shader = Shader.Find("Voxel/Block");
-            if (shader == null)
-                shader = Shader.Find("Shader Graphs/VoxelBlock");
+            Shader voxelShader = Shader.Find("Voxel/Block");
+            if (voxelShader == null)
+                voxelShader = Shader.Find("Shader Graphs/VoxelBlock");
 
-            _vertexColor = shader != null;
+            Shader litShader = Shader.Find("HDRP/Lit");
+            if (litShader == null)
+                litShader = Shader.Find("Universal Render Pipeline/Lit");
+            if (litShader == null)
+                litShader = Shader.Find("Standard");
 
-            if (shader == null)
-                shader = Shader.Find("HDRP/Lit");
-            if (shader == null)
-                shader = Shader.Find("Universal Render Pipeline/Lit");
-            if (shader == null)
-                shader = Shader.Find("Standard");
-            if (shader == null)
+            Shader fallback = voxelShader != null ? voxelShader : litShader;
+            if (fallback == null)
             {
                 Debug.LogError("[Voxels] Не найден шейдер для материалов блоков.");
                 return null;
             }
+
+            _vertexColor = voxelShader != null;
 
             _cache = new Material[BlockType.Count];
 
             for (int i = 0; i < _cache.Length; i++)
             {
                 var block = (ushort)i;
+
+                if (block == BlockType.Water && WaterOverride != null)
+                {
+                    _cache[i] = WaterOverride;
+                    continue;
+                }
+
+                // Кастомный Shader Graph блока собран как opaque, поэтому
+                // прозрачность воды на нём не включить. Для воды берём HDRP/Lit.
+                Shader shader = block == BlockType.Water && litShader != null ? litShader : fallback;
+
                 var material = new Material(shader)
                 {
                     name = "Voxel " + BlockType.GetName(block),
@@ -134,6 +201,36 @@ namespace Voxels
                 if (material.HasProperty("_Metallic"))
                     material.SetFloat("_Metallic", 0f);
 
+                // Вода — прозрачный материал HDRP: alpha-blend, двусторонний, туман на прозрачном.
+                if (block == BlockType.Water)
+                {
+                    material.SetFloat("_SurfaceType", 1f);
+                    material.SetFloat("_BlendMode", 0f);
+                    material.SetFloat("_EnableFogOnTransparent", 0f);
+                    material.SetFloat("_TransparentSortPriority", 0f);
+                    material.SetInt("_TransparentCullMode", 0);
+
+                    if (material.HasProperty("_AlphaCutoffEnable"))
+                        material.SetFloat("_AlphaCutoffEnable", 0f);
+                    if (material.HasProperty("_TransparentZWrite"))
+                        material.SetFloat("_TransparentZWrite", 0f);
+                    if (material.HasProperty("_ZTestTransparent"))
+                        material.SetInt("_ZTestTransparent", 4);
+
+                    // Иначе HDRP оставляет спекуляр при opacity = 0:
+                    // чёрная поверхность с бликом вместо прозрачности.
+                    if (material.HasProperty("_EnableBlendModePreserveSpecularLighting"))
+                        material.SetFloat("_EnableBlendModePreserveSpecularLighting", 0f);
+
+                    material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                    material.EnableKeyword("_BLENDMODE_ALPHA");
+                    material.DisableKeyword("_ENABLE_FOG_ON_TRANSPARENT");
+
+                    material.renderQueue = (int)RenderQueue.Transparent;
+
+                    material.SetColor("_BaseColor", new Color(0.08f, 0.26f, 0.48f, WaterAlpha));
+                }
+
                 _cache[i] = material;
             }
 
@@ -150,6 +247,7 @@ namespace Voxels
                 case BlockType.Dirt: return 0.04f;
                 case BlockType.Grass: return 0.08f;
                 case BlockType.ForestGrass: return 0.08f;
+                case BlockType.Water: return WaterSmoothness;
                 default: return 0.1f;
             }
         }

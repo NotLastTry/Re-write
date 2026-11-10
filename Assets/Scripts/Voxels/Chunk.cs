@@ -51,6 +51,7 @@ namespace Voxels
 
         MeshFilter _meshFilter;
         MeshRenderer _meshRenderer;
+        MeshCollider _meshCollider;
         Mesh _mesh;
 
         public ChunkId Id { get; private set; }
@@ -118,6 +119,10 @@ namespace Voxels
         {
             _meshFilter = GetComponent<MeshFilter>();
             _meshRenderer = GetComponent<MeshRenderer>();
+            _meshCollider = GetComponent<MeshCollider>();
+            if (_meshCollider == null)
+                _meshCollider = gameObject.AddComponent<MeshCollider>();
+
             _mesh = new Mesh { name = "Chunk Mesh", indexFormat = IndexFormat.UInt32 };
             _meshFilter.sharedMesh = _mesh;
 
@@ -198,8 +203,17 @@ namespace Voxels
                             else
                                 neighbour = world.GetBlock(originX + nx, originY + ny, originZ + nz);
 
-                            if (neighbour != BlockType.Air)
+                            // Вода не скрывает грани камня (она прозрачная),
+                            // а собственные грани рисует только к воздуху.
+                            if (block == BlockType.Water)
+                            {
+                                if (neighbour != BlockType.Air)
+                                    continue;
+                            }
+                            else if (neighbour != BlockType.Air && neighbour != BlockType.Water)
+                            {
                                 continue;
+                            }
 
                             AddFace(face, x, y, z, block, world);
                         }
@@ -262,6 +276,11 @@ namespace Voxels
             if (_vertices.Count == 0)
             {
                 _meshRenderer.enabled = false;
+                if (_meshCollider != null)
+                {
+                    _meshCollider.sharedMesh = null;
+                    _meshCollider.enabled = false;
+                }
                 return;
             }
 
@@ -282,6 +301,14 @@ namespace Voxels
                 _meshRenderer.sharedMaterials = materials;
 
             _meshRenderer.enabled = true;
+
+            if (_meshCollider != null)
+            {
+                // Переприсваиваем, чтобы Unity перезапекала коллайдер после правки блоков.
+                _meshCollider.sharedMesh = null;
+                _meshCollider.sharedMesh = _mesh;
+                _meshCollider.enabled = true;
+            }
         }
     }
 }

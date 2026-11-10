@@ -15,9 +15,21 @@ namespace Voxels
         public TerrainParams Climate;
 
         public float SeedDensity;
+        public float SeedContinents;
+        public float SeedErosion;
+        public float SeedRidges;
+
         public float Amplitude;
         public float Frequency;
         public float VerticalFrequency;
+
+        /// <summary>0 — старый рельеф, 1 — полностью сплайновый (в духе 1.18).</summary>
+        public float SplineBlend;
+
+        public float SeedCave;
+        public float CaveFrequency;
+        public float CaveThreshold;
+
         public int WorldHeight;
     }
 
@@ -27,8 +39,62 @@ namespace Voxels
     /// </summary>
     public static class DensityMath
     {
+        /// <summary>Кусочно-линейный сплайн смещения относительно уровня моря.</summary>
+        static float OffsetSpline(float continents)
+        {
+            if (continents < -0.6f)
+                return math.lerp(-44f, -28f, math.saturate((continents + 1f) / 0.4f));
+
+            if (continents < -0.2f)
+                return math.lerp(-28f, -10f, (continents + 0.6f) / 0.4f);
+
+            if (continents < 0.1f)
+                return math.lerp(-10f, 6f, (continents + 0.2f) / 0.3f);
+
+            if (continents < 0.45f)
+                return math.lerp(6f, 24f, (continents - 0.1f) / 0.35f);
+
+            return math.lerp(24f, 52f, math.saturate((continents - 0.45f) / 0.55f));
+        }
+
+        /// <summary>
+        /// Базовая высота: смесь прежнего рельефа и сплайнового (continentalness + erosion + ridges).
+        /// </summary>
+        public static float BaseHeight(int x, int z, DensityParams p)
+        {
+            float legacy = TerrainMath.Height(x, z, p.Climate);
+
+            float2 pos = new float2(x, z);
+
+            float continents = Noise.Fbm(pos * 0.0012f, 4, 2f, 0.5f, p.SeedContinents);
+            float erosion = Noise.Fbm(pos * 0.0015f, 4, 2f, 0.5f, p.SeedErosion);
+            float ridges = Noise.Ridged(pos * 0.004f, 3, p.SeedRidges);
+
+            float offset = OffsetSpline(continents);
+            float factor = math.lerp(1.3f, 0.55f, math.saturate(erosion * 0.5f + 0.5f));
+            float mountains = ridges * 34f * math.smoothstep(-0.1f, 0.6f, continents) * factor;
+
+            float splineHeight = p.Climate.SeaLevel + offset * factor + mountains;
+            splineHeight = TerrainMath.Terrace(splineHeight, 7f);
+            splineHeight = math.clamp(splineHeight, 4f, VoxelConstants.WorldHeight - 6f);
+
+            return math.lerp(legacy, splineHeight, p.SplineBlend);
+        }
+
+        /// <summary>Биом: континентальность отделяет низины у воды, остальное — климат.</summary>
+        public static byte SelectBiome(int height, int x, int z, DensityParams p)
+        {
+            float continents = Noise.Fbm(
+                new float2(x * 0.0012f, z * 0.0012f), 4, 2f, 0.5f, p.SeedContinents);
+
+            if (continents < -0.4f)
+                return (byte)Biome.Beach;
+
+            return TerrainMath.SelectBiome(height, x, z, p.Climate);
+        }
+
         public static float Density(int x, int y, int z, DensityParams p)
-            => DensityWithBase(TerrainMath.Height(x, z, p.Climate), x, y, z, p);
+            => DensityWithBase(BaseHeight(x, z, p), x, y, z, p);
 
         /// <summary>Плотность при уже посчитанной базовой высоте колонки.</summary>
         public static float DensityWithBase(float baseHeight, int x, int y, int z, DensityParams p)
@@ -107,7 +173,7 @@ namespace Voxels
             int worldZ = OriginZ + z;
 
             int top = 1;
-            float baseHeight = TerrainMath.Height(worldX, worldZ, Params.Climate);
+            float baseHeight = DensityMath.BaseHeight(worldX, worldZ, Params);
 
             for (int y = 0; y < WorldHeight; y++)
             {
@@ -124,7 +190,18 @@ namespace Voxels
                     top = y;
             }
 
-            byte biome = TerrainMath.SelectBiome(top, worldX, worldZ, Params.Climate);
+            byte biome = DensityMath.SelectBiome(top, worldX, worldZ, Params);
+
+            // Вода только над поверхностью: пещеры ниже уровня моря остаются воздушными.
+            for (int y = top + 1; y <= Params.Climate.SeaLevel && y < WorldHeight; y++)
+            {
+                int chunkY = y >> VoxelConstants.ChunkShift;
+                int localY = y & VoxelConstants.ChunkMask;
+                int voxelIndex = chunkY * VoxelConstants.ChunkVolume
+                               + (x * VoxelConstants.ChunkSize + localY) * VoxelConstants.ChunkSize + z;
+
+                Voxels[voxelIndex] = BlockType.Water;
+            }
 
             Surfaces[index] = (short)top;
             Biomes[index] = biome;
@@ -139,6 +216,32 @@ namespace Voxels
                                + (x * VoxelConstants.ChunkSize + localY) * VoxelConstants.ChunkSize + z;
 
                 Voxels[voxelIndex] = DensityMath.BlockAt(y, top, biome);
+            }
+
+            // Шумовые карверы: вырезаем полости ниже поверхности.
+            if (Params.CaveThreshold < 1f)
+            {
+                for (int y = 3; y < top - 4; y++)
+                {
+                    int chunkY = y >> VoxelConstants.ChunkShift;
+                    int localY = y & VoxelConstants.ChunkMask;
+                    int voxelIndex = chunkY * VoxelConstants.ChunkVolume
+                                   + (x * VoxelConstants.ChunkSize + localY) * VoxelConstants.ChunkSize + z;
+
+                    ushort current = Voxels[voxelIndex];
+                    if (current == BlockType.Air || current == BlockType.Water)
+                        continue;
+
+                    float cave = Noise.Fbm3(
+                        new float3(
+                            worldX * Params.CaveFrequency,
+                            y * Params.CaveFrequency * 1.6f,
+                            worldZ * Params.CaveFrequency),
+                        2, 2f, 0.5f, Params.SeedCave);
+
+                    if (cave > Params.CaveThreshold)
+                        Voxels[voxelIndex] = BlockType.Air;
+                }
             }
         }
     }
@@ -157,6 +260,9 @@ namespace Voxels
             Amplitude = 8f,
             Frequency = 0.012f,
             VerticalFrequency = 0.02f,
+            SplineBlend = 0.5f,
+            CaveFrequency = 0.02f,
+            CaveThreshold = 0.6f,
             WorldHeight = VoxelConstants.WorldHeight
         };
 
@@ -178,9 +284,31 @@ namespace Voxels
             set => Params.VerticalFrequency = value;
         }
 
-        public void Configure(TerrainParams climate)
+        public float SplineBlend
+        {
+            get => Params.SplineBlend;
+            set => Params.SplineBlend = value;
+        }
+
+        public float CaveThreshold
+        {
+            get => Params.CaveThreshold;
+            set => Params.CaveThreshold = value;
+        }
+
+        public float CaveFrequency
+        {
+            get => Params.CaveFrequency;
+            set => Params.CaveFrequency = value;
+        }
+
+        public void Configure(TerrainParams climate, int worldSeed)
         {
             Params.Climate = climate;
+            Params.SeedContinents = worldSeed * 1.31f + 101f;
+            Params.SeedErosion = worldSeed * 2.17f + 211f;
+            Params.SeedRidges = worldSeed * 3.73f + 307f;
+            Params.SeedCave = worldSeed * 4.19f + 401f;
         }
 
         public void FillColumn(int chunkX, int chunkZ, ushort[][] voxels, short[] heights, byte[] biomes)
@@ -248,7 +376,7 @@ namespace Voxels
             if (_heightCache.TryGetValue(key, out short cached))
                 return cached;
 
-            int height = (int)math.floor(TerrainMath.Height(worldX, worldZ, Params.Climate));
+            int height = (int)math.floor(DensityMath.BaseHeight(worldX, worldZ, Params));
             height = math.clamp(height, 1, VoxelConstants.WorldHeight - 1);
 
             _heightCache[key] = (short)height;
@@ -261,7 +389,7 @@ namespace Voxels
             if (_biomeCache.TryGetValue(key, out byte cached))
                 return cached;
 
-            byte biome = TerrainMath.SelectBiome(GetSurfaceHeight(worldX, worldZ), worldX, worldZ, Params.Climate);
+            byte biome = DensityMath.SelectBiome(GetSurfaceHeight(worldX, worldZ), worldX, worldZ, Params);
             _biomeCache[key] = biome;
             return biome;
         }
@@ -273,7 +401,14 @@ namespace Voxels
             if (worldY >= VoxelConstants.WorldHeight)
                 return BlockType.Air;
 
-            return DensityMath.BlockAt(worldY, GetSurfaceHeight(worldX, worldZ), GetBiome(worldX, worldZ));
+            ushort block = DensityMath.BlockAt(worldY, GetSurfaceHeight(worldX, worldZ), GetBiome(worldX, worldZ));
+
+            // На границе стриминга уровень моря тоже вода, иначе видны
+            // вертикальные стены воды на краю загруженной области.
+            if (block == BlockType.Air && worldY <= VoxelConstants.SeaLevel)
+                return BlockType.Water;
+
+            return block;
         }
 
         public void ForgetColumn(int chunkX, int chunkZ)

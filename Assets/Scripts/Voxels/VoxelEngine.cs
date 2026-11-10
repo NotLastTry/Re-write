@@ -21,6 +21,15 @@ namespace Voxels
         [Tooltip("Вертикальная частота 3D-шума")]
         [SerializeField, Range(0.005f, 0.06f)] float _densityVerticalFrequency = 0.02f;
 
+        [Tooltip("0 — прежний рельеф, 1 — сплайновый в духе 1.18")]
+        [SerializeField, Range(0f, 1f)] float _densitySplineBlend = 0.5f;
+
+        [Tooltip("Порог шумовых карверов: больше — меньше пещер, 1 — выключено")]
+        [SerializeField, Range(0f, 1f)] float _densityCaveThreshold = 0.6f;
+
+        [Tooltip("Частота шумовых карверов")]
+        [SerializeField, Range(0.005f, 0.05f)] float _densityCaveFrequency = 0.02f;
+
         [Header("Стриминг")]
         [Tooltip("Радиус загруженных колонок вокруг цели")]
         [SerializeField] int _viewRadius = 3;
@@ -33,6 +42,19 @@ namespace Voxels
 
         [Tooltip("За кем стримить. Если пусто — Main Camera")]
         [SerializeField] Transform _target;
+
+        [Header("Вода")]
+        [Tooltip("Ассет материала воды (HDRP/Lit Transparent). Создать: Tools → Voxels → Create Water Material")]
+        [SerializeField] Material _waterMaterial;
+
+        [Tooltip("Прозрачность воды: 0 — почти невидимая, 1 — плотная")]
+        [SerializeField, Range(0f, 1f)] float _waterAlpha = 0.35f;
+
+        [Tooltip("Цвет подводного тумана")]
+        [SerializeField] Color _underwaterFogColor = new Color(0.05f, 0.22f, 0.35f);
+
+        [Tooltip("Дистанция видимости под водой, м")]
+        [SerializeField, Range(1f, 80f)] float _underwaterFogDistance = 12f;
 
         [Header("Пещеры")]
         [SerializeField] bool _cavesEnabled = true;
@@ -87,6 +109,9 @@ namespace Voxels
 
         public World CurrentWorld { get; private set; }
         public int PendingColumns => _pending.Count;
+
+        public Color UnderwaterFogColor => _underwaterFogColor;
+        public float UnderwaterFogDistance => _underwaterFogDistance;
 
         readonly List<Vector2Int> _pending = new List<Vector2Int>();
         readonly List<Vector2Int> _unloadScratch = new List<Vector2Int>();
@@ -308,10 +333,16 @@ namespace Voxels
             if (CurrentWorld == null)
                 return;
 
+            VoxelMaterials.ApplyWaterMaterial(_waterMaterial);
+            VoxelMaterials.ApplyWaterAlpha(_waterAlpha);
+
             CurrentWorld.UseDensity = _useDensity;
             CurrentWorld.Density.Amplitude = _densityAmplitude;
             CurrentWorld.Density.Frequency = _densityFrequency;
             CurrentWorld.Density.VerticalFrequency = _densityVerticalFrequency;
+            CurrentWorld.Density.SplineBlend = _densitySplineBlend;
+            CurrentWorld.Density.CaveThreshold = _densityCaveThreshold;
+            CurrentWorld.Density.CaveFrequency = _densityCaveFrequency;
 
             CurrentWorld.Caves.Enabled = _cavesEnabled;
             CurrentWorld.Caves.Iterations = _caveIterations;
@@ -330,7 +361,7 @@ namespace Voxels
             CurrentWorld.Generator.CliffThreshold = _cliffThreshold;
 
             // Плотность использует климат генератора, поэтому обновляем его после смены настроек.
-            CurrentWorld.Density.Configure(CurrentWorld.Generator.GetParams());
+            CurrentWorld.Density.Configure(CurrentWorld.Generator.GetParams(), CurrentWorld.Generator.Seed);
 
             CurrentWorld.Generator.DebugSlope = _debugSlope;
             CurrentWorld.Generator.DebugSlopeThreshold = _debugSlopeThreshold;
@@ -368,18 +399,24 @@ namespace Voxels
 
         void PlaceTargetAboveTerrain()
         {
-            if (_target == null)
+            Transform target = _target;
+
+            PlayerController player = FindAnyObjectByType<PlayerController>();
+            if (player != null)
+                target = player.transform;
+
+            if (target == null)
                 return;
 
-            Vector3 position = _target.position;
+            Vector3 position = target.position;
             int surface = CurrentWorld.GetSurfaceHeight(
                 Mathf.FloorToInt(position.x),
                 Mathf.FloorToInt(position.z));
 
             if (position.y < surface + 3f)
             {
-                _target.position = new Vector3(position.x, surface + 12f, position.z);
-                Debug.Log($"[Voxels] Спавн под землёй (y={position.y:0}, поверхность {surface}) — камера поднята.");
+                target.position = new Vector3(position.x, surface + 12f, position.z);
+                Debug.Log($"[Voxels] Спавн под землёй (y={position.y:0}, поверхность {surface}) — игрок поднят.");
             }
         }
     }
