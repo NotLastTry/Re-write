@@ -164,6 +164,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Voxels.VoxelEngine
   _seed: 1337
+  _blockDatabase: {fileID: 11400000, guid: aeaf933336dd4be4b85ac217bffcab12, type: 2}
   _useDensity: 1
   _densityAmplitude: 10
   _densityFrequency: 0.012
@@ -171,6 +172,7 @@ MonoBehaviour:
   _densitySplineBlend: 0.5
   _densityCaveThreshold: 0.6
   _densityCaveFrequency: 0.02
+  _structuresEnabled: 1
   _viewRadius: 2
   _preloadRadius: 1
   _columnsPerFrame: 1
@@ -487,7 +489,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6261549017818063948, guid: c22c7bd6652c15a418fd1f043998d7f3, type: 3}
       propertyPath: _firstPersonOffset.y
-      value: 0
+      value: 1.6
       objectReference: {fileID: 0}
     - target: {fileID: 6261549017818063948, guid: c22c7bd6652c15a418fd1f043998d7f3, type: 3}
       propertyPath: _thirdPersonOffset.y

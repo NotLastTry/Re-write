@@ -8,6 +8,9 @@ namespace Voxels
         [Header("Мир")]
         [SerializeField] int _seed = 1337;
 
+        [Tooltip("Необязательный override. Если пусто — описания блоков грузятся из Assets/Resources/Blocks.")]
+        [SerializeField] BlockDatabase _blockDatabase;
+
         [Header("Генерация")]
         [Tooltip("3D-плотность вместо карты высот: нависания и карнизы")]
         [SerializeField] bool _useDensity = true;
@@ -29,6 +32,10 @@ namespace Voxels
 
         [Tooltip("Частота шумовых карверов")]
         [SerializeField, Range(0.005f, 0.05f)] float _densityCaveFrequency = 0.02f;
+
+        [Header("Структуры")]
+        [Tooltip("Деревья, кактусы и валуны по биомам")]
+        [SerializeField] bool _structuresEnabled = true;
 
         [Header("Стриминг")]
         [Tooltip("Радиус загруженных колонок вокруг цели")]
@@ -333,10 +340,13 @@ namespace Voxels
             if (CurrentWorld == null)
                 return;
 
+            BlockDatabase.SetCurrent(_blockDatabase != null ? _blockDatabase : BlockDatabase.Ensure());
+
             VoxelMaterials.ApplyWaterMaterial(_waterMaterial);
             VoxelMaterials.ApplyWaterAlpha(_waterAlpha);
 
             CurrentWorld.UseDensity = _useDensity;
+            CurrentWorld.Structures.Enabled = _structuresEnabled;
             CurrentWorld.Density.Amplitude = _densityAmplitude;
             CurrentWorld.Density.Frequency = _densityFrequency;
             CurrentWorld.Density.VerticalFrequency = _densityVerticalFrequency;

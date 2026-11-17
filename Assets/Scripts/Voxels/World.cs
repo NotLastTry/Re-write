@@ -15,11 +15,14 @@ namespace Voxels
             // рельеф новый, а рисунок пещер остаётся прежним.
             Caves.Seed = unchecked((uint)Generator.Seed);
             Density.Configure(Generator.GetParams(), Generator.Seed);
+            Structures.Seed = Generator.Seed;
+            Structures.Definitions = Resources.LoadAll<StructureDefinition>("Structures");
         }
 
         public TerrainGenerator Generator { get; }
         public CaveGenerator Caves { get; } = new CaveGenerator();
         public DensityGenerator Density { get; } = new DensityGenerator();
+        public StructureGenerator Structures { get; } = new StructureGenerator();
 
         /// <summary>Режим 3D-плотности вместо карты высот.</summary>
         public bool UseDensity;
@@ -86,6 +89,9 @@ namespace Voxels
 
             // Вырезаем пещеры во всех четырёх чанках колонки сразу.
             Caves.Carve(chunkX, chunkZ, heights, voxels);
+
+            // Деревья и камни ставим после пещер, чтобы они не висели в воздухе.
+            Structures.Place(this, chunkX, chunkZ, voxels);
 
             for (int chunkY = 0; chunkY < column.Length; chunkY++)
             {
@@ -180,6 +186,9 @@ namespace Voxels
         /// <summary>Высота поверхности для спавна и отладки.</summary>
         public int GetSurfaceHeight(int x, int z)
             => UseDensity ? Density.GetSurfaceHeight(x, z) : Generator.GetSurfaceHeight(x, z);
+
+        public byte GetBiome(int x, int z)
+            => UseDensity ? Density.GetBiome(x, z) : Generator.GetBiome(x, z);
 
         public void SetBlock(int x, int y, int z, ushort block)
         {

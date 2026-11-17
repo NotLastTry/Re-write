@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26fe3acc70eaa424f80a7a26a82d8852, type: 3}
+  m_Name: BasicTree
+  m_EditorClassIdentifier: Assembly-CSharp::Voxels.StructureDefinition
+  Size: {x: 3, y: 6, z: 3}
+  Anchor: {x: 2, y: 0, z: 2}
+  Blocks: 0000000000000000090000000000000000000000000000000000090000000000000000000a000a000a000a0009000a000a000a000a000a000a000a000a0009000a000a000a000a000a000a000a000a0009000a000a000a000a0000000a0000000a0009000a0000000a000000
+  Rarity: 0.002
+  Biomes: 000100000000
+  MinSurface: 0
+  MaxSurface: 120
+  Rotate: 1

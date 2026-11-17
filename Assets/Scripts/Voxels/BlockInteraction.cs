@@ -11,27 +11,52 @@ namespace Voxels
     {
         [SerializeField] float _reach = 8f;
 
-        static readonly ushort[] Palette =
+        static readonly ushort[] DefaultPalette =
         {
             BlockType.Stone,
             BlockType.Dirt,
             BlockType.Grass,
             BlockType.Sand,
             BlockType.Snow,
-            BlockType.Water
+            BlockType.Water,
+            BlockType.Wood,
+            BlockType.Leaves,
+            BlockType.Cactus
         };
 
         static readonly Key[] Digits =
         {
-            Key.Digit1, Key.Digit2, Key.Digit3, Key.Digit4, Key.Digit5, Key.Digit6
+            Key.Digit1, Key.Digit2, Key.Digit3, Key.Digit4, Key.Digit5,
+            Key.Digit6, Key.Digit7, Key.Digit8, Key.Digit9
         };
 
         VoxelEngine _engine;
+        ushort[] _palette = DefaultPalette;
         int _selected;
 
         void Start()
         {
             _engine = Object.FindAnyObjectByType<VoxelEngine>();
+            BlockDatabase.Ensure();
+            RebuildPalette();
+        }
+
+        void RebuildPalette()
+        {
+            BlockDatabase database = BlockDatabase.Current;
+            if (database == null || database.Blocks == null)
+                return;
+
+            var ids = new System.Collections.Generic.List<ushort>();
+
+            foreach (BlockDefinition definition in database.Blocks)
+            {
+                if (definition != null && definition.IsPlaceable && definition.Id != BlockType.Air)
+                    ids.Add(definition.Id);
+            }
+
+            if (ids.Count > 0)
+                _palette = ids.ToArray();
         }
 
         void Update()
@@ -45,7 +70,7 @@ namespace Voxels
             if (keyboard == null || mouse == null)
                 return;
 
-            for (int i = 0; i < Digits.Length; i++)
+            for (int i = 0; i < Digits.Length && i < _palette.Length; i++)
             {
                 if (keyboard[Digits[i]].wasPressedThisFrame)
                     _selected = i;
@@ -74,12 +99,17 @@ namespace Voxels
             }
             else
             {
+                if (_palette.Length == 0)
+                    return;
+
+                _selected = Mathf.Clamp(_selected, 0, _palette.Length - 1);
+
                 Vector3 outside = hit.point + hit.normal * 0.5f;
                 _engine.CurrentWorld.SetBlock(
                     Mathf.FloorToInt(outside.x),
                     Mathf.FloorToInt(outside.y),
                     Mathf.FloorToInt(outside.z),
-                    Palette[_selected]);
+                    _palette[_selected]);
             }
         }
     }

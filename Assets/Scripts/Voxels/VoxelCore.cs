@@ -40,15 +40,23 @@ namespace Voxels
         /// <summary>Трава лесного биома — темнее обычной.</summary>
         public const ushort ForestGrass = 7;
 
-        /// <summary>Вода: пока непрозрачный блок, отдельный материал.</summary>
+        /// <summary>Вода.</summary>
         public const ushort Water = 8;
 
-        public const int Count = 9;
+        public const ushort Wood = 9;
+        public const ushort Leaves = 10;
+        public const ushort Cactus = 11;
+
+        public const int Count = 12;
 
         public static bool IsSolid(ushort block) => block != Air;
 
         public static string GetName(ushort block)
         {
+            BlockDefinition definition = BlockDatabase.Current?.Get(block);
+            if (definition != null)
+                return definition.DisplayName;
+
             switch (block)
             {
                 case Air: return "Air";
@@ -60,12 +68,19 @@ namespace Voxels
                 case Debug: return "Debug";
                 case ForestGrass: return "ForestGrass";
                 case Water: return "Water";
+                case Wood: return "Wood";
+                case Leaves: return "Leaves";
+                case Cactus: return "Cactus";
                 default: return "Unknown";
             }
         }
 
         public static Color GetColor(ushort block)
         {
+            BlockDefinition definition = BlockDatabase.Current?.Get(block);
+            if (definition != null)
+                return definition.Color;
+
             switch (block)
             {
                 case Stone: return new Color(0.42f, 0.42f, 0.45f);
@@ -76,7 +91,32 @@ namespace Voxels
                 case Debug: return new Color(1f, 0f, 1f);
                 case ForestGrass: return new Color(0.16f, 0.34f, 0.12f);
                 case Water: return new Color(0.10f, 0.30f, 0.55f);
+                case Wood: return new Color(0.34f, 0.23f, 0.13f);
+                case Leaves: return new Color(0.18f, 0.44f, 0.16f);
+                case Cactus: return new Color(0.20f, 0.48f, 0.24f);
                 default: return Color.magenta;
+            }
+        }
+
+        public static float GetSmoothness(ushort block)
+        {
+            BlockDefinition definition = BlockDatabase.Current?.Get(block);
+            if (definition != null)
+                return definition.Smoothness;
+
+            switch (block)
+            {
+                case Stone: return 0.18f;
+                case Snow: return 0.35f;
+                case Sand: return 0.03f;
+                case Dirt: return 0.04f;
+                case Grass: return 0.08f;
+                case ForestGrass: return 0.08f;
+                case Water: return 0.25f;
+                case Wood: return 0.05f;
+                case Leaves: return 0.03f;
+                case Cactus: return 0.15f;
+                default: return 0.1f;
             }
         }
     }
@@ -201,8 +241,12 @@ namespace Voxels
                 if (material.HasProperty("_Metallic"))
                     material.SetFloat("_Metallic", 0f);
 
-                // Вода — прозрачный материал HDRP: alpha-blend, двусторонний, туман на прозрачном.
-                if (block == BlockType.Water)
+                BlockDefinition definition = BlockDatabase.Current?.Get(block);
+                bool isWater = definition != null ? definition.IsWater : block == BlockType.Water;
+                bool transparent = definition != null ? definition.IsTransparent : isWater;
+
+                // Прозрачный материал HDRP: alpha-blend, двусторонний, без сохранения спекуляра.
+                if (transparent)
                 {
                     material.SetFloat("_SurfaceType", 1f);
                     material.SetFloat("_BlendMode", 0f);
@@ -228,7 +272,11 @@ namespace Voxels
 
                     material.renderQueue = (int)RenderQueue.Transparent;
 
-                    material.SetColor("_BaseColor", new Color(0.08f, 0.26f, 0.48f, WaterAlpha));
+                    Color tint = isWater
+                        ? new Color(0.08f, 0.26f, 0.48f, WaterAlpha)
+                        : new Color(BlockType.GetColor(block).r, BlockType.GetColor(block).g, BlockType.GetColor(block).b, WaterAlpha);
+
+                    material.SetColor("_BaseColor", tint);
                 }
 
                 _cache[i] = material;
@@ -238,18 +286,6 @@ namespace Voxels
         }
 
         static float Smoothness(ushort block)
-        {
-            switch (block)
-            {
-                case BlockType.Stone: return 0.18f;
-                case BlockType.Snow: return 0.35f;
-                case BlockType.Sand: return 0.03f;
-                case BlockType.Dirt: return 0.04f;
-                case BlockType.Grass: return 0.08f;
-                case BlockType.ForestGrass: return 0.08f;
-                case BlockType.Water: return WaterSmoothness;
-                default: return 0.1f;
-            }
-        }
+            => BlockType.GetSmoothness(block);
     }
 }
