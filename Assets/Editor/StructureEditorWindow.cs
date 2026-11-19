@@ -216,6 +216,11 @@ namespace Voxels.EditorTools
             _definition.MaxSurface = EditorGUILayout.IntField("Макс. высота", _definition.MaxSurface);
             _definition.Rotate = EditorGUILayout.Toggle("Случайный поворот", _definition.Rotate);
 
+            _definition.NeedsFoundation = EditorGUILayout.Toggle("Нужна подсыпка", _definition.NeedsFoundation);
+
+            if (_definition.NeedsFoundation)
+                DrawFoundationBlock();
+
             EditorGUILayout.LabelField("Биомы");
 
             for (int i = 0; i < _definition.Biomes.Length; i++)
@@ -226,6 +231,36 @@ namespace Voxels.EditorTools
 
             if (GUI.changed)
                 EditorUtility.SetDirty(_definition);
+        }
+
+        void DrawFoundationBlock()
+        {
+            BlockDatabase database = BlockDatabase.Ensure();
+            BlockDefinition[] blocks = database != null ? database.Blocks : null;
+
+            if (blocks == null)
+                return;
+
+            var names = new System.Collections.Generic.List<string>();
+            var ids = new System.Collections.Generic.List<ushort>();
+
+            foreach (BlockDefinition block in blocks)
+            {
+                if (block == null || block.Id == BlockType.Air || !block.IsPlaceable)
+                    continue;
+
+                names.Add(block.DisplayName);
+                ids.Add(block.Id);
+            }
+
+            int index = ids.IndexOf(_definition.FoundationBlock);
+            if (index < 0)
+                index = 0;
+
+            int selected = EditorGUILayout.Popup("Блок подсыпки", index, names.ToArray());
+
+            if (selected >= 0 && selected < ids.Count)
+                _definition.FoundationBlock = ids[selected];
         }
 
         void DrawGrid()

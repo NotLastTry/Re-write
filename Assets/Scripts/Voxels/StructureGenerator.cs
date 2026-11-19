@@ -191,14 +191,14 @@ namespace Voxels
                         if (roll >= definition.Rarity)
                             continue;
 
-                        Stamp(definition, worldX, worldZ, surface, i, voxels, chunkX, chunkZ);
+                        Stamp(world, definition, worldX, worldZ, surface, i, voxels, chunkX, chunkZ);
                         break;
                     }
                 }
             }
         }
 
-        void Stamp(StructureDefinition definition, int worldX, int worldZ, int surface, int index,
+        void Stamp(World world, StructureDefinition definition, int worldX, int worldZ, int surface, int index,
             ushort[][] voxels, int chunkX, int chunkZ)
         {
             int rotation = definition.Rotate
@@ -207,6 +207,11 @@ namespace Voxels
 
             Vector3Int size = definition.Size;
             Vector3Int anchor = definition.Anchor;
+
+            int bottomY = surface + 1 - anchor.y;
+
+            if (definition.NeedsFoundation)
+                FillFoundation(world, definition, worldX, worldZ, bottomY, rotation, voxels, chunkX, chunkZ);
 
             for (int y = 0; y < size.y; y++)
             {
@@ -237,6 +242,53 @@ namespace Voxels
                             worldZ + rz,
                             block);
                     }
+                }
+            }
+        }
+
+        void FillFoundation(World world, StructureDefinition definition, int worldX, int worldZ,
+            int bottomY, int rotation, ushort[][] voxels, int chunkX, int chunkZ)
+        {
+            Vector3Int size = definition.Size;
+            Vector3Int anchor = definition.Anchor;
+
+            for (int z = 0; z < size.z; z++)
+            {
+                for (int x = 0; x < size.x; x++)
+                {
+                    bool hasBlock = false;
+
+                    for (int y = 0; y < size.y; y++)
+                    {
+                        if (definition.Get(x, y, z) != BlockType.Air)
+                        {
+                            hasBlock = true;
+                            break;
+                        }
+                    }
+
+                    if (!hasBlock)
+                        continue;
+
+                    int ox = x - anchor.x;
+                    int oz = z - anchor.z;
+                    int rx = ox;
+                    int rz = oz;
+
+                    switch (rotation)
+                    {
+                        case 1: rx = oz; rz = -ox; break;
+                        case 2: rx = -ox; rz = -oz; break;
+                        case 3: rx = -oz; rz = ox; break;
+                    }
+
+                    int wx = worldX + rx;
+                    int wz = worldZ + rz;
+
+                    int localSurface = world.GetSurfaceHeight(wx, wz);
+
+                    for (int y = localSurface + 1; y < bottomY; y++)
+                        Set(voxels, chunkX, chunkZ, wx, y, wz, definition.FoundationBlock);
                 }
             }
         }

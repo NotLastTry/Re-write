@@ -26,6 +26,10 @@ namespace Voxels
         public int MaxSurface = 120;
         public bool Rotate = true;
 
+        [Header("Подсыпка")]
+        public bool NeedsFoundation;
+        public ushort FoundationBlock = BlockType.Stone;
+
         public int Volume => Size.x * Size.y * Size.z;
 
         public ushort Get(int x, int y, int z)
