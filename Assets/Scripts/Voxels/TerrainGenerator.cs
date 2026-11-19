@@ -146,6 +146,8 @@ namespace Voxels
         /// <summary>Считает высоты колонки с осыпью и кладёт их в массивы чанка.</summary>
         public void FillColumnHeights(int chunkX, int chunkZ, short[] heights, byte[] biomes)
         {
+            using var heightsMarker = VoxelProfiler.Heights.Auto();
+
             if (UseJobs)
                 FillColumnHeightsJobs(chunkX, chunkZ, heights, biomes);
             else

@@ -20,3 +20,5 @@ MonoBehaviour:
   MinSurface: 0
   MaxSurface: 120
   Rotate: 1
+  NeedsFoundation: 0
+  FoundationBlock: 1

@@ -30,6 +30,17 @@ namespace Voxels
             new Vector3Int(0, 0, 1),
         };
 
+        // Смещения соседей в плоском массиве (x*size + y)*size + z.
+        static readonly int[] FaceOffsets =
+        {
+            -VoxelConstants.ChunkSize * VoxelConstants.ChunkSize,
+            VoxelConstants.ChunkSize * VoxelConstants.ChunkSize,
+            -VoxelConstants.ChunkSize,
+            VoxelConstants.ChunkSize,
+            -1,
+            1,
+        };
+
         static readonly Vector2[] QuadUvs =
         {
             new Vector2(0, 0), new Vector2(0, 1), new Vector2(1, 1), new Vector2(1, 0),
@@ -47,6 +58,7 @@ namespace Voxels
         // Смещения соседей для AO: по 3 сэмпла на каждую вершину каждой грани.
         static readonly Vector3Int[] AoOffsets = BuildAoOffsets();
         static readonly float[] AoShade = { 1f, 0.8f, 0.62f, 0.45f };
+        readonly bool[] _topMerged = new bool[VoxelConstants.ChunkVolume];
         bool _useVertexAo;
 
         MeshFilter _meshFilter;
@@ -155,6 +167,7 @@ namespace Voxels
         /// <summary>Строит меш: только грани на стыке с воздухом.</summary>
         public void RebuildMesh(World world)
         {
+            using var meshMarker = VoxelProfiler.Mesh.Auto();
             if (!HasBlocks)
             {
                 _mesh.Clear();
@@ -172,50 +185,64 @@ namespace Voxels
             for (int i = 0; i < _triangles.Length; i++)
                 _triangles[i].Clear();
 
+            MergeTopFaces();
+
             const int size = VoxelConstants.ChunkSize;
             int originX = Id.X * size;
             int originY = Id.Y * size;
             int originZ = Id.Z * size;
             int solidCount = 0;
 
-            for (int x = 0; x < size; x++)
+            using (VoxelProfiler.MeshFaces.Auto())
             {
-                for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
                 {
-                    for (int z = 0; z < size; z++)
+                    int xBase = x * size * size;
+
+                    for (int y = 0; y < size; y++)
                     {
-                        ushort block = this[x, y, z];
-                        if (block == BlockType.Air)
-                            continue;
+                        int yBase = xBase + y * size;
 
-                        solidCount++;
-
-                        for (int face = 0; face < FaceDirections.Length; face++)
+                        for (int z = 0; z < size; z++)
                         {
-                            Vector3Int direction = FaceDirections[face];
-                            int nx = x + direction.x;
-                            int ny = y + direction.y;
-                            int nz = z + direction.z;
+                            int index = yBase + z;
+                            ushort block = _voxels[index];
 
-                            ushort neighbour;
-                            if (nx >= 0 && nx < size && ny >= 0 && ny < size && nz >= 0 && nz < size)
-                                neighbour = this[nx, ny, nz];
-                            else
-                                neighbour = world.GetBlock(originX + nx, originY + ny, originZ + nz);
-
-                            // Вода не скрывает грани камня (она прозрачная),
-                            // а собственные грани рисует только к воздуху.
-                            if (block == BlockType.Water)
-                            {
-                                if (neighbour != BlockType.Air)
-                                    continue;
-                            }
-                            else if (neighbour != BlockType.Air && neighbour != BlockType.Water)
-                            {
+                            if (block == BlockType.Air)
                                 continue;
-                            }
 
-                            AddFace(face, x, y, z, block, world);
+                            solidCount++;
+
+                            for (int face = 0; face < FaceDirections.Length; face++)
+                            {
+                                if (face == 3 && _topMerged[index])
+                                    continue;
+
+                                Vector3Int direction = FaceDirections[face];
+                                int nx = x + direction.x;
+                                int ny = y + direction.y;
+                                int nz = z + direction.z;
+
+                                ushort neighbour;
+                                if (nx >= 0 && nx < size && ny >= 0 && ny < size && nz >= 0 && nz < size)
+                                    neighbour = _voxels[index + FaceOffsets[face]];
+                                else
+                                    neighbour = world.GetBlock(originX + nx, originY + ny, originZ + nz);
+
+                                // Вода не скрывает грани камня (она прозрачная),
+                                // а собственные грани рисует только к воздуху.
+                                if (block == BlockType.Water)
+                                {
+                                    if (neighbour != BlockType.Air)
+                                        continue;
+                                }
+                                else if (neighbour != BlockType.Air && neighbour != BlockType.Water)
+                                {
+                                    continue;
+                                }
+
+                                AddFace(face, x, y, z, block, world);
+                            }
                         }
                     }
                 }
@@ -225,6 +252,106 @@ namespace Voxels
             UploadMesh();
         }
 
+        void MergeTopFaces()
+        {
+            using var greedyMarker = VoxelProfiler.MeshGreedy.Auto();
+
+            const int size = VoxelConstants.ChunkSize;
+            System.Array.Clear(_topMerged, 0, _topMerged.Length);
+
+            for (int x = 1; x < size - 1; x++)
+            {
+                for (int z = 1; z < size - 1; z++)
+                {
+                    for (int y = 1; y < size - 1; y++)
+                    {
+                        int index = (x * size + y) * size + z;
+
+                        if (_topMerged[index] || !CanMergeTop(x, y, z))
+                            continue;
+
+                        ushort block = _voxels[index];
+                        int run = 1;
+
+                        while (z + run < size - 1)
+                        {
+                            int next = (x * size + y) * size + z + run;
+
+                            if (_topMerged[next] || _voxels[next] != block || !CanMergeTop(x, y, z + run))
+                                break;
+
+                            run++;
+                        }
+
+                        AddTopQuad(x, y, z, run, block);
+
+                        for (int i = 0; i < run; i++)
+                            _topMerged[(x * size + y) * size + z + i] = true;
+                    }
+                }
+            }
+        }
+
+        bool CanMergeTop(int x, int y, int z)
+        {
+            const int size = VoxelConstants.ChunkSize;
+            int index = (x * size + y) * size + z;
+            ushort block = _voxels[index];
+
+            if (block == BlockType.Air || block == BlockType.Water)
+                return false;
+
+            // Сверху и по 3x3 вокруг верхней плоскости должно быть пусто:
+            // тогда AO у всех четырёх углов одинаковый (максимум).
+            for (int dz = -1; dz <= 1; dz++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int sample = ((x + dx) * size + (y + 1)) * size + (z + dz);
+                    if (_voxels[sample] != BlockType.Air)
+                        return false;
+                }
+            }
+
+            return true;
+        }
+
+        void AddTopQuad(int x, int y, int z, int run, ushort block)
+        {
+            int baseIndex = _vertices.Count;
+            float yTop = y + 1f;
+
+            _vertices.Add(new Vector3(x, yTop, z));
+            _vertices.Add(new Vector3(x, yTop, z + run));
+            _vertices.Add(new Vector3(x + 1, yTop, z + run));
+            _vertices.Add(new Vector3(x + 1, yTop, z));
+
+            for (int i = 0; i < 4; i++)
+                _normals.Add(Vector3.up);
+
+            _uvs.Add(new Vector2(0f, 0f));
+            _uvs.Add(new Vector2(0f, run));
+            _uvs.Add(new Vector2(1f, run));
+            _uvs.Add(new Vector2(1f, 0f));
+
+            if (_useVertexAo)
+            {
+                var white = new Color32(255, 255, 255, 255);
+                _colors.Add(white);
+                _colors.Add(white);
+                _colors.Add(white);
+                _colors.Add(white);
+            }
+
+            List<int> triangles = _triangles[block];
+            triangles.Add(baseIndex);
+            triangles.Add(baseIndex + 1);
+            triangles.Add(baseIndex + 2);
+            triangles.Add(baseIndex);
+            triangles.Add(baseIndex + 2);
+            triangles.Add(baseIndex + 3);
+        }
+
         void AddFace(int face, int x, int y, int z, ushort block, World world)
         {
             Vector3[] quad = FaceVertices[face];
@@ -232,14 +359,32 @@ namespace Voxels
             var normal = new Vector3(direction.x, direction.y, direction.z);
             int baseIndex = _vertices.Count;
 
+            int originX = Id.X * VoxelConstants.ChunkSize;
+            int originY = Id.Y * VoxelConstants.ChunkSize;
+            int originZ = Id.Z * VoxelConstants.ChunkSize;
+
             for (int i = 0; i < 4; i++)
             {
                 _vertices.Add(new Vector3(x, y, z) + quad[i]);
                 _normals.Add(normal);
                 _uvs.Add(QuadUvs[i]);
+            }
 
-                if (_useVertexAo)
-                    _colors.Add(AoColor(world, x, y, z, face, i));
+            if (_useVertexAo)
+            {
+                using (VoxelProfiler.MeshAo.Auto())
+                {
+                    for (int i = 0; i < 4; i++)
+                    {
+                        _colors.Add(AoColor(
+                            world,
+                            originX + x,
+                            originY + y,
+                            originZ + z,
+                            face,
+                            i));
+                    }
+                }
             }
 
             List<int> triangles = _triangles[block];
@@ -251,7 +396,7 @@ namespace Voxels
         /// Классическое вершинное AO: угол затемняется, если рядом с ним есть блоки.
         /// Значение уходит в цвет вершины; его использует Shader Graph блоков.
         /// </summary>
-        static Color32 AoColor(World world, int x, int y, int z, int face, int vertex)
+        Color32 AoColor(World world, int x, int y, int z, int face, int vertex)
         {
             int b = (face * 4 + vertex) * 3;
 
@@ -265,11 +410,29 @@ namespace Voxels
             return new Color32(shade, shade, shade, 255);
         }
 
-        static bool IsSolid(World world, int x, int y, int z)
-            => world.GetBlock(x, y, z) != BlockType.Air;
+        bool IsSolid(World world, int worldX, int worldY, int worldZ)
+        {
+            int originX = Id.X * VoxelConstants.ChunkSize;
+            int originY = Id.Y * VoxelConstants.ChunkSize;
+            int originZ = Id.Z * VoxelConstants.ChunkSize;
+
+            if (worldX >= originX && worldX < originX + VoxelConstants.ChunkSize &&
+                worldY >= originY && worldY < originY + VoxelConstants.ChunkSize &&
+                worldZ >= originZ && worldZ < originZ + VoxelConstants.ChunkSize)
+            {
+                return this[
+                    worldX & VoxelConstants.ChunkMask,
+                    worldY & VoxelConstants.ChunkMask,
+                    worldZ & VoxelConstants.ChunkMask] != BlockType.Air;
+            }
+
+            return world.GetBlock(worldX, worldY, worldZ) != BlockType.Air;
+        }
 
         void UploadMesh()
         {
+            using var uploadMarker = VoxelProfiler.MeshUpload.Auto();
+
             _mesh.Clear();
             _mesh.indexFormat = IndexFormat.UInt32;
 
@@ -304,10 +467,13 @@ namespace Voxels
 
             if (_meshCollider != null)
             {
-                // Переприсваиваем, чтобы Unity перезапекала коллайдер после правки блоков.
-                _meshCollider.sharedMesh = null;
-                _meshCollider.sharedMesh = _mesh;
-                _meshCollider.enabled = true;
+                using (VoxelProfiler.Collider.Auto())
+                {
+                    // Переприсваиваем, чтобы Unity перезапекала коллайдер после правки блоков.
+                    _meshCollider.sharedMesh = null;
+                    _meshCollider.sharedMesh = _mesh;
+                    _meshCollider.enabled = true;
+                }
             }
         }
     }

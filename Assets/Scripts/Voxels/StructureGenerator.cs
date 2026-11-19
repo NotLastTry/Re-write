@@ -17,6 +17,8 @@ namespace Voxels
 
         public void Place(World world, int chunkX, int chunkZ, ushort[][] voxels)
         {
+            using var structuresMarker = VoxelProfiler.Structures.Auto();
+
             if (!Enabled)
                 return;
 
@@ -31,51 +33,64 @@ namespace Voxels
                     int worldX = chunkX * size + x;
                     int worldZ = chunkZ * size + z;
 
+                    // Высоту можно брать только у уже сгенерированной колонки,
+                    // иначе дерево построится по приблизительной высоте и повиснет.
+                    int columnChunkX = worldX >> VoxelConstants.ChunkShift;
+                    int columnChunkZ = worldZ >> VoxelConstants.ChunkShift;
+
+                    if (!world.HasColumn(columnChunkX, columnChunkZ))
+                        continue;
+
+                    float roll = Hash01(worldX, worldZ, Seed);
+
+                    // 0.05 — максимальный шанс дерева/кактуса. Для остальных ~95%
+                    // колонок высоту и биом вообще не считаем.
+                    if (roll >= 0.05f)
+                        continue;
+
                     int surface = world.GetSurfaceHeight(worldX, worldZ);
                     if (surface <= VoxelConstants.SeaLevel + 1 || surface >= VoxelConstants.WorldHeight - 12)
                         continue;
 
                     var biome = (Biome)world.GetBiome(worldX, worldZ);
-                    float roll = Hash01(worldX, worldZ, Seed);
 
                     switch (biome)
                     {
                         case Biome.Forest:
                             if (roll < 0.045f)
-                                PlaceTree(world, voxels, chunkX, chunkZ, worldX, worldZ, surface, 5);
+                                PlaceTree(world, worldX, worldZ, surface, 5);
                             break;
 
                         case Biome.Plains:
                             if (roll < 0.012f)
-                                PlaceTree(world, voxels, chunkX, chunkZ, worldX, worldZ, surface, 4);
+                                PlaceTree(world, worldX, worldZ, surface, 4);
                             break;
 
                         case Biome.Tundra:
                             if (roll < 0.006f)
-                                PlaceTree(world, voxels, chunkX, chunkZ, worldX, worldZ, surface, 6);
+                                PlaceTree(world, worldX, worldZ, surface, 6);
                             break;
 
                         case Biome.Desert:
                             if (roll < 0.02f)
-                                PlaceCactus(voxels, chunkX, chunkZ, worldX, worldZ, surface);
+                                PlaceCactus(world, worldX, worldZ, surface);
                             break;
 
                         case Biome.Mountains:
                             if (surface < VoxelConstants.SnowLine - 6 && roll < 0.015f)
-                                PlaceBoulder(voxels, chunkX, chunkZ, worldX, worldZ, surface);
+                                PlaceBoulder(world, worldX, worldZ, surface);
                             break;
                     }
                 }
             }
         }
 
-        void PlaceTree(World world, ushort[][] voxels, int chunkX, int chunkZ,
-            int worldX, int worldZ, int surface, int baseHeight)
+        void PlaceTree(World world, int worldX, int worldZ, int surface, int baseHeight)
         {
             int height = baseHeight + (int)(Hash01(worldX + 17, worldZ - 31, Seed + 7) * 3f);
 
             for (int i = 1; i <= height; i++)
-                Set(voxels, chunkX, chunkZ, worldX, surface + i, worldZ, BlockType.Wood);
+                Set(world, worldX, surface + i, worldZ, BlockType.Wood);
 
             int top = surface + height;
 
@@ -90,21 +105,21 @@ namespace Voxels
                         if (Mathf.Abs(dx) == radius && Mathf.Abs(dz) == radius)
                             continue;
 
-                        Set(voxels, chunkX, chunkZ, worldX + dx, top + dy, worldZ + dz, BlockType.Leaves);
+                        Set(world, worldX + dx, top + dy, worldZ + dz, BlockType.Leaves);
                     }
                 }
             }
         }
 
-        void PlaceCactus(ushort[][] voxels, int chunkX, int chunkZ, int worldX, int worldZ, int surface)
+        void PlaceCactus(World world, int worldX, int worldZ, int surface)
         {
             int height = 2 + (int)(Hash01(worldX - 11, worldZ + 23, Seed + 13) * 3f);
 
             for (int i = 1; i <= height; i++)
-                Set(voxels, chunkX, chunkZ, worldX, surface + i, worldZ, BlockType.Cactus);
+                Set(world, worldX, surface + i, worldZ, BlockType.Cactus);
         }
 
-        void PlaceBoulder(ushort[][] voxels, int chunkX, int chunkZ, int worldX, int worldZ, int surface)
+        void PlaceBoulder(World world, int worldX, int worldZ, int surface)
         {
             int radius = 1 + (int)(Hash01(worldX + 41, worldZ + 5, Seed + 19) * 2f);
 
@@ -117,31 +132,15 @@ namespace Voxels
                         if (dx * dx + dy * dy + dz * dz > radius * radius + 1)
                             continue;
 
-                        Set(voxels, chunkX, chunkZ, worldX + dx, surface + dy, worldZ + dz, BlockType.Stone);
+                        Set(world, worldX + dx, surface + dy, worldZ + dz, BlockType.Stone);
                     }
                 }
             }
         }
 
-        static void Set(ushort[][] voxels, int chunkX, int chunkZ, int worldX, int worldY, int worldZ, ushort block)
+        static void Set(World world, int worldX, int worldY, int worldZ, ushort block)
         {
-            if (worldY < 0 || worldY >= VoxelConstants.WorldHeight)
-                return;
-
-            if ((worldX >> VoxelConstants.ChunkShift) != chunkX)
-                return;
-            if ((worldZ >> VoxelConstants.ChunkShift) != chunkZ)
-                return;
-
-            int chunkY = worldY >> VoxelConstants.ChunkShift;
-            int localX = worldX & VoxelConstants.ChunkMask;
-            int localY = worldY & VoxelConstants.ChunkMask;
-            int localZ = worldZ & VoxelConstants.ChunkMask;
-
-            int index = (localX * VoxelConstants.ChunkSize + localY) * VoxelConstants.ChunkSize + localZ;
-
-            if (voxels[chunkY][index] == BlockType.Air)
-                voxels[chunkY][index] = block;
+            world.PlaceRaw(worldX, worldY, worldZ, block);
         }
 
         void PlaceStructures(World world, int chunkX, int chunkZ, ushort[][] voxels)
@@ -150,6 +149,7 @@ namespace Voxels
                 return;
 
             int margin = 1;
+            float maxRarity = 0f;
 
             foreach (StructureDefinition definition in Definitions)
             {
@@ -157,7 +157,11 @@ namespace Voxels
                     continue;
 
                 margin = Mathf.Max(margin, Mathf.Max(definition.Size.x, definition.Size.z) + 1);
+                maxRarity = Mathf.Max(maxRarity, definition.Rarity);
             }
+
+            if (maxRarity <= 0f)
+                return;
 
             const int size = VoxelConstants.ChunkSize;
 
@@ -167,6 +171,19 @@ namespace Voxels
                 {
                     int worldX = chunkX * size + x;
                     int worldZ = chunkZ * size + z;
+
+                    float columnRoll = Hash01(worldX, worldZ, Seed + 303);
+
+                    // Ранний выход: для подавляющего большинства колонок
+                    // высота и биом не нужны вовсе.
+                    if (columnRoll >= maxRarity)
+                        continue;
+
+                    int anchorChunkX = worldX >> VoxelConstants.ChunkShift;
+                    int anchorChunkZ = worldZ >> VoxelConstants.ChunkShift;
+
+                    if (!world.HasColumn(anchorChunkX, anchorChunkZ))
+                        continue;
 
                     int surface = world.GetSurfaceHeight(worldX, worldZ);
                     if (surface <= VoxelConstants.SeaLevel + 1 || surface >= VoxelConstants.WorldHeight - 4)
@@ -187,19 +204,17 @@ namespace Voxels
                         if (surface < definition.MinSurface || surface > definition.MaxSurface)
                             continue;
 
-                        float roll = Hash01(worldX + i * 17, worldZ - i * 31, Seed + 303);
-                        if (roll >= definition.Rarity)
+                        if (columnRoll >= definition.Rarity)
                             continue;
 
-                        Stamp(world, definition, worldX, worldZ, surface, i, voxels, chunkX, chunkZ);
+                        Stamp(world, definition, worldX, worldZ, surface, i);
                         break;
                     }
                 }
             }
         }
 
-        void Stamp(World world, StructureDefinition definition, int worldX, int worldZ, int surface, int index,
-            ushort[][] voxels, int chunkX, int chunkZ)
+        void Stamp(World world, StructureDefinition definition, int worldX, int worldZ, int surface, int index)
         {
             int rotation = definition.Rotate
                 ? (int)(Hash01(worldX + 5, worldZ + 11, Seed + 401 + index) * 4f)
@@ -211,7 +226,7 @@ namespace Voxels
             int bottomY = surface + 1 - anchor.y;
 
             if (definition.NeedsFoundation)
-                FillFoundation(world, definition, worldX, worldZ, bottomY, rotation, voxels, chunkX, chunkZ);
+                FillFoundation(world, definition, worldX, worldZ, bottomY, rotation);
 
             for (int y = 0; y < size.y; y++)
             {
@@ -236,7 +251,7 @@ namespace Voxels
                             case 3: rx = -oz; rz = ox; break;
                         }
 
-                        Set(voxels, chunkX, chunkZ,
+                        Set(world,
                             worldX + rx,
                             surface + 1 + (y - anchor.y),
                             worldZ + rz,
@@ -247,7 +262,7 @@ namespace Voxels
         }
 
         void FillFoundation(World world, StructureDefinition definition, int worldX, int worldZ,
-            int bottomY, int rotation, ushort[][] voxels, int chunkX, int chunkZ)
+            int bottomY, int rotation)
         {
             Vector3Int size = definition.Size;
             Vector3Int anchor = definition.Anchor;
@@ -288,7 +303,7 @@ namespace Voxels
                     int localSurface = world.GetSurfaceHeight(wx, wz);
 
                     for (int y = localSurface + 1; y < bottomY; y++)
-                        Set(voxels, chunkX, chunkZ, wx, y, wz, definition.FoundationBlock);
+                        Set(world, wx, y, wz, definition.FoundationBlock);
                 }
             }
         }

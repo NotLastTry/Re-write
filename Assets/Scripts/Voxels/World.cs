@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 
 namespace Voxels
@@ -6,6 +7,10 @@ namespace Voxels
     public sealed class World
     {
         readonly Dictionary<ChunkId, Chunk> _chunks = new Dictionary<ChunkId, Chunk>();
+
+        // Изменения игрока: колонка -> (локальный индекс блока -> блок).
+        readonly Dictionary<long, Dictionary<int, ushort>> _columnEdits =
+            new Dictionary<long, Dictionary<int, ushort>>();
 
         public World(TerrainGenerator generator)
         {
@@ -46,6 +51,8 @@ namespace Voxels
         /// <summary>Создаёт колонку: 4 чанка по высоте из одного прохода по высотам.</summary>
         public void CreateColumn(int chunkX, int chunkZ, Transform parent)
         {
+            using var columnMarker = VoxelProfiler.Column.Auto();
+
             if (HasColumn(chunkX, chunkZ))
                 return;
 
@@ -92,6 +99,9 @@ namespace Voxels
 
             // Деревья и камни ставим после пещер, чтобы они не висели в воздухе.
             Structures.Place(this, chunkX, chunkZ, voxels);
+
+            // Правки игрока накладываются поверх сгенерированного мира.
+            ApplyEdits(chunkX, chunkZ, voxels);
 
             for (int chunkY = 0; chunkY < column.Length; chunkY++)
             {
@@ -190,8 +200,130 @@ namespace Voxels
         public byte GetBiome(int x, int z)
             => UseDensity ? Density.GetBiome(x, z) : Generator.GetBiome(x, z);
 
+        /// <summary>
+        /// Ставит блок в любой загруженный чанк, только если там воздух.
+        /// Нужен структурам, которые пересекают границы чанков; меш перестраивает вызывающий.
+        /// </summary>
+        public bool PlaceRaw(int x, int y, int z, ushort block)
+        {
+            if (y < 0 || y >= VoxelConstants.WorldHeight)
+                return false;
+
+            var id = ChunkId.FromWorldPos(x, y, z);
+            if (!_chunks.TryGetValue(id, out Chunk chunk))
+                return false;
+
+            int localX = x & VoxelConstants.ChunkMask;
+            int localY = y & VoxelConstants.ChunkMask;
+            int localZ = z & VoxelConstants.ChunkMask;
+
+            if (chunk[localX, localY, localZ] != BlockType.Air)
+                return false;
+
+            chunk[localX, localY, localZ] = block;
+            chunk.HasBlocks = true;
+            return true;
+        }
+
+        public int EditCount
+        {
+            get
+            {
+                int count = 0;
+                foreach (Dictionary<int, ushort> column in _columnEdits.Values)
+                    count += column.Count;
+                return count;
+            }
+        }
+
+        static long ColumnKey(int chunkX, int chunkZ)
+            => ((long)chunkX << 32) ^ (uint)chunkZ;
+
+        static int LocalKey(int x, int y, int z)
+            => ((x & VoxelConstants.ChunkMask) << 12)
+             | (y << 5)
+             | (z & VoxelConstants.ChunkMask);
+
+        void StoreEdit(int x, int y, int z, ushort block)
+        {
+            int chunkX = x >> VoxelConstants.ChunkShift;
+            int chunkZ = z >> VoxelConstants.ChunkShift;
+            long key = ColumnKey(chunkX, chunkZ);
+
+            if (!_columnEdits.TryGetValue(key, out Dictionary<int, ushort> column))
+            {
+                column = new Dictionary<int, ushort>();
+                _columnEdits[key] = column;
+            }
+
+            column[LocalKey(x, y, z)] = block;
+        }
+
+        void ApplyEdits(int chunkX, int chunkZ, ushort[][] voxels)
+        {
+            if (!_columnEdits.TryGetValue(ColumnKey(chunkX, chunkZ), out Dictionary<int, ushort> column))
+                return;
+
+            foreach (KeyValuePair<int, ushort> edit in column)
+            {
+                int local = edit.Key;
+                int localX = (local >> 12) & VoxelConstants.ChunkMask;
+                int y = (local >> 5) & 0x7F;
+                int localZ = local & VoxelConstants.ChunkMask;
+
+                int chunkY = y >> VoxelConstants.ChunkShift;
+                int localY = y & VoxelConstants.ChunkMask;
+                int index = (localX * VoxelConstants.ChunkSize + localY) * VoxelConstants.ChunkSize + localZ;
+
+                voxels[chunkY][index] = edit.Value;
+            }
+        }
+
+        public void WriteEdits(BinaryWriter writer)
+        {
+            writer.Write(EditCount);
+
+            foreach (KeyValuePair<long, Dictionary<int, ushort>> pair in _columnEdits)
+            {
+                int chunkX = (int)(pair.Key >> 32);
+                int chunkZ = unchecked((int)(pair.Key & 0xFFFFFFFF));
+
+                foreach (KeyValuePair<int, ushort> edit in pair.Value)
+                {
+                    int local = edit.Key;
+                    int localX = (local >> 12) & VoxelConstants.ChunkMask;
+                    int y = (local >> 5) & 0x7F;
+                    int localZ = local & VoxelConstants.ChunkMask;
+
+                    writer.Write(chunkX * VoxelConstants.ChunkSize + localX);
+                    writer.Write(y);
+                    writer.Write(chunkZ * VoxelConstants.ChunkSize + localZ);
+                    writer.Write(edit.Value);
+                }
+            }
+        }
+
+        public void ReadEdits(BinaryReader reader)
+        {
+            _columnEdits.Clear();
+
+            int count = reader.ReadInt32();
+
+            for (int i = 0; i < count; i++)
+            {
+                int x = reader.ReadInt32();
+                int y = reader.ReadInt32();
+                int z = reader.ReadInt32();
+                ushort block = reader.ReadUInt16();
+
+                StoreEdit(x, y, z, block);
+            }
+        }
+
         public void SetBlock(int x, int y, int z, ushort block)
         {
+            using var setBlockMarker = VoxelProfiler.SetBlock.Auto();
+
             if (y < 0 || y >= VoxelConstants.WorldHeight)
                 return;
 
@@ -204,6 +336,7 @@ namespace Voxels
             int localZ = z & VoxelConstants.ChunkMask;
 
             chunk[localX, localY, localZ] = block;
+            StoreEdit(x, y, z, block);
 
             if (block != BlockType.Air)
                 chunk.HasBlocks = true;

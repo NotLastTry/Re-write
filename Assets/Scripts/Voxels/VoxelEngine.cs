@@ -11,6 +11,9 @@ namespace Voxels
         [Tooltip("Необязательный override. Если пусто — описания блоков грузятся из Assets/Resources/Blocks.")]
         [SerializeField] BlockDatabase _blockDatabase;
 
+        [Tooltip("Сохранять изменённые блоки при выходе")]
+        [SerializeField] bool _saveWorld = true;
+
         [Header("Генерация")]
         [Tooltip("3D-плотность вместо карты высот: нависания и карнизы")]
         [SerializeField] bool _useDensity = true;
@@ -113,6 +116,8 @@ namespace Voxels
         bool _pendingRebuild;
         float _rebuildAt;
         int _appliedSeed;
+        string _worldName;
+        bool _worldActive;
 
         public World CurrentWorld { get; private set; }
         public int PendingColumns => _pending.Count;
@@ -131,21 +136,144 @@ namespace Voxels
 
         void Start()
         {
-            _appliedSeed = _seed;
-            CurrentWorld = new World(new TerrainGenerator(_seed));
+            if (_target == null && Camera.main != null)
+                _target = Camera.main.transform;
+
+            SetPlayerEnabled(false);
+            ShowWorldMenu();
+        }
+
+        public void StartNewWorld(string name, int seed)
+        {
+            BeginWorld(seed, WorldStore.SanitizeName(name), false);
+        }
+
+        public void LoadWorld(string name)
+        {
+            if (!WorldStore.TryReadSeed(name, out int seed))
+            {
+                Debug.LogWarning($"[Voxels] Не удалось прочитать мир '{name}'.");
+                return;
+            }
+
+            BeginWorld(seed, name, true);
+        }
+
+        void BeginWorld(int seed, string name, bool loadEdits)
+        {
+            ClearWorld();
+
+            _seed = seed;
+            _appliedSeed = seed;
+            _worldName = name;
+            _worldActive = true;
+
+            CurrentWorld = new World(new TerrainGenerator(seed));
 
             ApplyWorldSettings();
             CurrentWorld.Generator.ResetDebugStats();
 
-            if (_target == null && Camera.main != null)
-                _target = Camera.main.transform;
+            if (loadEdits)
+                WorldStore.Load(CurrentWorld, name);
 
             PlaceTargetAboveTerrain();
             Preload();
+
+            SetPlayerEnabled(true);
+
+            WorldMenu menu = FindAnyObjectByType<WorldMenu>();
+            if (menu != null)
+                menu.Hide();
+        }
+
+        public void ExitToMenu()
+        {
+            if (!_worldActive)
+                return;
+
+            SaveWorld();
+
+            SetPlayerEnabled(false);
+            ClearWorld();
+
+            _worldActive = false;
+            _worldName = string.Empty;
+
+            ShowWorldMenu();
+        }
+
+        void ShowWorldMenu()
+        {
+            WorldMenu menu = FindAnyObjectByType<WorldMenu>();
+
+            if (menu == null)
+            {
+                Debug.LogError("[Voxels] В сцене нет WorldMenu. Запусти Tools → Voxels → Create World Menu UI.");
+                return;
+            }
+
+            menu.Show();
+        }
+
+        void ClearWorld()
+        {
+            _pending.Clear();
+
+            if (CurrentWorld == null)
+                return;
+
+            foreach (KeyValuePair<ChunkId, Chunk> pair in CurrentWorld.Chunks)
+            {
+                if (pair.Value != null)
+                    Destroy(pair.Value.gameObject);
+            }
+
+            CurrentWorld = null;
+        }
+
+        void SetPlayerEnabled(bool enabled)
+        {
+            foreach (PlayerController player in FindObjectsByType<PlayerController>(FindObjectsSortMode.None))
+                player.enabled = enabled;
+
+            foreach (BlockInteraction interaction in FindObjectsByType<BlockInteraction>(FindObjectsSortMode.None))
+                interaction.enabled = enabled;
+
+            if (!enabled)
+            {
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
+        }
+
+        void OnApplicationQuit()
+        {
+            SaveWorld();
+        }
+
+        void OnApplicationPause(bool paused)
+        {
+            if (paused)
+                SaveWorld();
+        }
+
+        void OnDestroy()
+        {
+            SaveWorld();
+        }
+
+        void SaveWorld()
+        {
+            if (!_saveWorld || CurrentWorld == null || string.IsNullOrEmpty(_worldName))
+                return;
+
+            WorldStore.Save(CurrentWorld, _worldName);
         }
 
         void Update()
         {
+            using var frameMarker = VoxelProfiler.Frame.Auto();
+
             if (CurrentWorld == null)
                 return;
 
@@ -157,18 +285,21 @@ namespace Voxels
 
             UpdateCenter();
 
-            int budget = Mathf.Max(1, _columnsPerFrame);
-            while (budget > 0 && _pending.Count > 0)
+            using (VoxelProfiler.Streaming.Auto())
             {
-                int last = _pending.Count - 1;
-                Vector2Int column = _pending[last];
-                _pending.RemoveAt(last);
+                int budget = Mathf.Max(1, _columnsPerFrame);
+                while (budget > 0 && _pending.Count > 0)
+                {
+                    int last = _pending.Count - 1;
+                    Vector2Int column = _pending[last];
+                    _pending.RemoveAt(last);
 
-                if (CurrentWorld.HasColumn(column.x, column.y))
-                    continue;
+                    if (CurrentWorld.HasColumn(column.x, column.y))
+                        continue;
 
-                CurrentWorld.CreateColumn(column.x, column.y, transform);
-                budget--;
+                    CurrentWorld.CreateColumn(column.x, column.y, transform);
+                    budget--;
+                }
             }
 
             UpdateLoadTimer();
@@ -423,10 +554,10 @@ namespace Voxels
                 Mathf.FloorToInt(position.x),
                 Mathf.FloorToInt(position.z));
 
-            if (position.y < surface + 3f)
+            if (position.y < surface + 3f || position.y > surface + 30f)
             {
                 target.position = new Vector3(position.x, surface + 12f, position.z);
-                Debug.Log($"[Voxels] Спавн под землёй (y={position.y:0}, поверхность {surface}) — игрок поднят.");
+                Debug.Log($"[Voxels] Спавн скорректирован: поверхность {surface}, игрок поднят.");
             }
         }
     }

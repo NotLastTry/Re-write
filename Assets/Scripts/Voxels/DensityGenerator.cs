@@ -313,6 +313,8 @@ namespace Voxels
 
         public void FillColumn(int chunkX, int chunkZ, ushort[][] voxels, short[] heights, byte[] biomes)
         {
+            using var densityMarker = VoxelProfiler.Density.Auto();
+
             const int size = VoxelConstants.ChunkSize;
             const int volume = VoxelConstants.ChunkVolume;
             int chunkCount = VoxelConstants.ChunksInHeight;

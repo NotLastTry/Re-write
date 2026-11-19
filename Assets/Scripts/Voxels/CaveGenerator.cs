@@ -45,6 +45,7 @@ namespace Voxels
 
         public void Carve(int chunkX, int chunkZ, short[] heights, ushort[][] voxels)
         {
+            using var cavesMarker = VoxelProfiler.Caves.Auto();
             if (!Enabled)
                 return;
 
