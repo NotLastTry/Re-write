@@ -15,9 +15,6 @@ namespace Voxels
 
         const int Margin = 3;
 
-        /// <summary>Самый щедрый порог редкости среди биомов: если бросок выше, структуры точно не будет.</summary>
-        const float MaxBiomeRarity = 0.045f;
-
         public void Place(World world, int chunkX, int chunkZ, ushort[][] voxels)
         {
             if (!Enabled)
@@ -34,17 +31,12 @@ namespace Voxels
                     int worldX = chunkX * size + x;
                     int worldZ = chunkZ * size + z;
 
-                    // Сначала дешёвый бросок: высота и биом — это шумовые запросы,
-                    // которые нужны лишь для ~4% клеток (иначе на колонку уходили десятки мс).
-                    float roll = Hash01(worldX, worldZ, Seed);
-                    if (roll >= MaxBiomeRarity)
-                        continue;
-
                     int surface = world.GetSurfaceHeight(worldX, worldZ);
                     if (surface <= VoxelConstants.SeaLevel + 1 || surface >= VoxelConstants.WorldHeight - 12)
                         continue;
 
                     var biome = (Biome)world.GetBiome(worldX, worldZ);
+                    float roll = Hash01(worldX, worldZ, Seed);
 
                     switch (biome)
                     {
@@ -175,27 +167,6 @@ namespace Voxels
                 {
                     int worldX = chunkX * size + x;
                     int worldZ = chunkZ * size + z;
-
-                    // Быстрая отсечка по редкости: высота/биом (дорогие шумовые запросы)
-                    // нужны только там, где хотя бы одна структура может появиться.
-                    bool possible = false;
-
-                    for (int i = 0; i < Definitions.Length; i++)
-                    {
-                        StructureDefinition definition = Definitions[i];
-                        if (definition == null)
-                            continue;
-
-                        float chance = Hash01(worldX + i * 17, worldZ - i * 31, Seed + 303);
-                        if (chance < definition.Rarity)
-                        {
-                            possible = true;
-                            break;
-                        }
-                    }
-
-                    if (!possible)
-                        continue;
 
                     int surface = world.GetSurfaceHeight(worldX, worldZ);
                     if (surface <= VoxelConstants.SeaLevel + 1 || surface >= VoxelConstants.WorldHeight - 4)

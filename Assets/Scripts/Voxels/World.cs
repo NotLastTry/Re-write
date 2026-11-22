@@ -7,16 +7,6 @@ namespace Voxels
     {
         readonly Dictionary<ChunkId, Chunk> _chunks = new Dictionary<ChunkId, Chunk>();
 
-        /// <summary>Выгруженные чанки не уничтожаем, а держим в пуле: меши, воксели и списки переиспользуются.</summary>
-        readonly Stack<Chunk> _chunkPool = new Stack<Chunk>(32);
-
-        const int ColumnCells = VoxelConstants.ChunkSize * VoxelConstants.ChunkSize;
-
-        readonly short[] _heightsScratch = new short[ColumnCells];
-        readonly byte[] _biomesScratch = new byte[ColumnCells];
-        readonly Chunk[] _columnScratch = new Chunk[VoxelConstants.ChunksInHeight];
-        readonly ushort[][] _voxelsScratch = new ushort[VoxelConstants.ChunksInHeight][];
-
         public World(TerrainGenerator generator)
         {
             Generator = generator ?? new TerrainGenerator();
@@ -38,7 +28,6 @@ namespace Voxels
         public bool UseDensity;
         public IReadOnlyDictionary<ChunkId, Chunk> Chunks => _chunks;
         public int ChunkCount => _chunks.Count;
-        public int PooledChunkCount => _chunkPool.Count;
 
         public int ColumnCount
         {
@@ -60,24 +49,20 @@ namespace Voxels
             if (HasColumn(chunkX, chunkZ))
                 return;
 
-            using (VoxelProfiling.Column.Auto())
-            {
-                CreateColumnInternal(chunkX, chunkZ, parent);
-            }
-        }
+            var heights = new short[VoxelConstants.ChunkSize * VoxelConstants.ChunkSize];
+            var biomes = new byte[VoxelConstants.ChunkSize * VoxelConstants.ChunkSize];
 
-        void CreateColumnInternal(int chunkX, int chunkZ, Transform parent)
-        {
-            short[] heights = _heightsScratch;
-            byte[] biomes = _biomesScratch;
-            Chunk[] column = _columnScratch;
-            ushort[][] voxels = _voxelsScratch;
+            var column = new Chunk[VoxelConstants.ChunksInHeight];
+            var voxels = new ushort[VoxelConstants.ChunksInHeight][];
 
             for (int chunkY = 0; chunkY < VoxelConstants.ChunksInHeight; chunkY++)
             {
                 var id = new ChunkId(chunkX, chunkY, chunkZ);
 
-                Chunk chunk = RentChunk(parent);
+                var gameObject = new GameObject("Chunk");
+                gameObject.transform.SetParent(parent, false);
+
+                var chunk = gameObject.AddComponent<Chunk>();
                 chunk.Initialize(id);
                 chunk.HasBlocks = false;
 
@@ -88,40 +73,25 @@ namespace Voxels
 
             if (UseDensity)
             {
-                using (VoxelProfiling.Terrain.Auto())
-                {
-                    Density.FillColumn(chunkX, chunkZ, voxels, heights, biomes);
-                }
+                Density.FillColumn(chunkX, chunkZ, voxels, heights, biomes);
             }
             else
             {
-                using (VoxelProfiling.Terrain.Auto())
-                {
-                    Generator.FillColumnHeights(chunkX, chunkZ, heights, biomes);
-                }
+                Generator.FillColumnHeights(chunkX, chunkZ, heights, biomes);
 
-                using (VoxelProfiling.Fill.Auto())
+                for (int chunkY = 0; chunkY < column.Length; chunkY++)
                 {
-                    for (int chunkY = 0; chunkY < column.Length; chunkY++)
-                    {
-                        var id = new ChunkId(chunkX, chunkY, chunkZ);
-                        column[chunkY].HasBlocks =
-                            Generator.FillChunkFromHeights(id, heights, biomes, voxels[chunkY]);
-                    }
+                    var id = new ChunkId(chunkX, chunkY, chunkZ);
+                    column[chunkY].HasBlocks =
+                        Generator.FillChunkFromHeights(id, heights, biomes, voxels[chunkY]);
                 }
             }
 
             // Вырезаем пещеры во всех четырёх чанках колонки сразу.
-            using (VoxelProfiling.Caves.Auto())
-            {
-                Caves.Carve(chunkX, chunkZ, heights, voxels);
-            }
+            Caves.Carve(chunkX, chunkZ, heights, voxels);
 
             // Деревья и камни ставим после пещер, чтобы они не висели в воздухе.
-            using (VoxelProfiling.Structures.Auto())
-            {
-                Structures.Place(this, chunkX, chunkZ, voxels);
-            }
+            Structures.Place(this, chunkX, chunkZ, voxels);
 
             for (int chunkY = 0; chunkY < column.Length; chunkY++)
             {
@@ -134,25 +104,7 @@ namespace Voxels
 
             // Соседние колонки могли быть отмешированы раньше, когда этой ещё не было:
             // на стыке они считали грани по генератору, без пещер.
-            using (VoxelProfiling.NeighbourRemesh.Auto())
-            {
-                RebuildNeighbourColumns(chunkX, chunkZ);
-            }
-        }
-
-        Chunk RentChunk(Transform parent)
-        {
-            if (_chunkPool.Count > 0)
-            {
-                Chunk pooled = _chunkPool.Pop();
-                pooled.transform.SetParent(parent, false);
-                pooled.gameObject.SetActive(true);
-                return pooled;
-            }
-
-            var gameObject = new GameObject("Chunk");
-            gameObject.transform.SetParent(parent, false);
-            return gameObject.AddComponent<Chunk>();
+            RebuildNeighbourColumns(chunkX, chunkZ);
         }
 
         void RebuildNeighbourColumns(int chunkX, int chunkZ)
@@ -169,11 +121,7 @@ namespace Voxels
             {
                 var id = new ChunkId(chunkX, chunkY, chunkZ);
                 if (_chunks.TryGetValue(id, out Chunk chunk) && chunk.HasBlocks)
-                {
-                    // Коллайдер соседа не перезапекаем: на стыке меняются единичные грани,
-                    // а кукинг PhysX-меша стоит заметно дороже.
-                    chunk.RebuildMesh(this, false);
-                }
+                    chunk.RebuildMesh(this);
             }
         }
 
@@ -189,7 +137,7 @@ namespace Voxels
         }
 
 
-        /// <summary>Выгружает колонку: чанки уходят в пул, кэш высот чистится.</summary>
+        /// <summary>Выгружает колонку: уничтожает 4 чанка и чистит кэш высот.</summary>
         public void RemoveColumn(int chunkX, int chunkZ, bool rebuildNeighbours = true)
         {
             for (int chunkY = 0; chunkY < VoxelConstants.ChunksInHeight; chunkY++)
@@ -201,10 +149,7 @@ namespace Voxels
                 _chunks.Remove(id);
 
                 if (chunk != null)
-                {
-                    chunk.PrepareForPool();
-                    _chunkPool.Push(chunk);
-                }
+                    Object.Destroy(chunk.gameObject);
             }
 
             Generator.ForgetColumn(chunkX, chunkZ);
@@ -278,28 +223,6 @@ namespace Voxels
             var neighbourId = new ChunkId(id.X + dx, id.Y + dy, id.Z + dz);
             if (_chunks.TryGetValue(neighbourId, out Chunk neighbour))
                 neighbour.RebuildMesh(this);
-        }
-
-        /// <summary>Уничтожает все чанки, включая пул. Нужно при смене мира/сида.</summary>
-        public void Dispose()
-        {
-            foreach (KeyValuePair<ChunkId, Chunk> pair in _chunks)
-            {
-                if (pair.Value != null)
-                    Object.Destroy(pair.Value.gameObject);
-            }
-
-            _chunks.Clear();
-
-            while (_chunkPool.Count > 0)
-            {
-                Chunk pooled = _chunkPool.Pop();
-                if (pooled != null)
-                    Object.Destroy(pooled.gameObject);
-            }
-
-            Generator.ClearHeightCache();
-            Density.ClearCaches();
         }
     }
 }

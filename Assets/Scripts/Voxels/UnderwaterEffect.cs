@@ -20,8 +20,6 @@ namespace Voxels
         VolumeProfile _profile;
         Fog _fog;
         bool _underwater;
-        Color _lastColor;
-        float _lastDistance = float.NaN;
 
         void Start()
         {
@@ -57,22 +55,9 @@ namespace Voxels
             if (_engine == null || _engine.CurrentWorld == null || _fog == null)
                 return;
 
-            // Настройки можно менять в инспекторе VoxelEngine на лету,
-            // но переписываем профиль только при реальном изменении:
-            // каждый Override помечает Volume грязным и стоит кадрового времени.
-            Color color = _engine.UnderwaterFogColor;
-            if (color != _lastColor)
-            {
-                _fog.color.Override(color);
-                _lastColor = color;
-            }
-
-            float distance = _engine.UnderwaterFogDistance;
-            if (!Mathf.Approximately(distance, _lastDistance))
-            {
-                _fog.meanFreePath.Override(distance);
-                _lastDistance = distance;
-            }
+            // Настройки можно менять в инспекторе VoxelEngine на лету.
+            _fog.color.Override(_engine.UnderwaterFogColor);
+            _fog.meanFreePath.Override(_engine.UnderwaterFogDistance);
 
             Vector3 position = transform.position;
 
