@@ -1,0 +1,17 @@
+﻿Этап,Маркер,мс/колонку,Колонок
+Стартовая загрузка,Voxels.Column,76.02,7.0
+Стартовая загрузка,Voxels.Terrain,4.61,7.0
+Стартовая загрузка,Voxels.Fill,0.0,7.0
+Стартовая загрузка,Voxels.Caves,3.83,7.0
+Стартовая загрузка,Voxels.Structures,39.12,7.0
+Стартовая загрузка,Voxels.ChunkMesh,28.0,7.0
+Стартовая загрузка,Voxels.NeighbourRemesh,15.01,7.0
+Стартовая загрузка,Voxels.ColliderBake,5.13,7.0
+Телепорт 256 блоков,Voxels.Column,77.08,11.0
+Телепорт 256 блоков,Voxels.Terrain,3.74,11.0
+Телепорт 256 блоков,Voxels.Fill,0.0,11.0
+Телепорт 256 блоков,Voxels.Caves,3.65,11.0
+Телепорт 256 блоков,Voxels.Structures,40.29,11.0
+Телепорт 256 блоков,Voxels.ChunkMesh,28.68,11.0
+Телепорт 256 блоков,Voxels.NeighbourRemesh,14.81,11.0
+Телепорт 256 блоков,Voxels.ColliderBake,6.4,11.0

@@ -335,6 +335,12 @@ namespace Voxels
             _rebuildAt = Time.realtimeSinceStartup + 0.25f;
         }
 #endif
+
+        void OnDestroy()
+        {
+            if (CurrentWorld != null)
+                CurrentWorld.Dispose();
+        }
         void ApplyWorldSettings()
         {
             if (CurrentWorld == null)
@@ -394,7 +400,9 @@ namespace Voxels
 
             if (_appliedSeed != _seed)
             {
+                World previous = CurrentWorld;
                 CurrentWorld = new World(new TerrainGenerator(_seed));
+                previous.Dispose();
                 _appliedSeed = _seed;
             }
 

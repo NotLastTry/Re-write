@@ -48,6 +48,11 @@ namespace Voxels
         static readonly Vector3Int[] AoOffsets = BuildAoOffsets();
         static readonly float[] AoShade = { 1f, 0.8f, 0.62f, 0.45f };
         bool _useVertexAo;
+        bool _materialsApplied;
+
+        int _originX;
+        int _originY;
+        int _originZ;
 
         MeshFilter _meshFilter;
         MeshRenderer _meshRenderer;
@@ -140,9 +145,39 @@ namespace Voxels
         {
             Id = id;
             name = "Chunk " + id;
+            _originX = id.X * VoxelConstants.ChunkSize;
+            _originY = id.Y * VoxelConstants.ChunkSize;
+            _originZ = id.Z * VoxelConstants.ChunkSize;
             transform.SetPositionAndRotation(
                 new Vector3(id.X, id.Y, id.Z) * VoxelConstants.ChunkSize,
                 Quaternion.identity);
+        }
+
+        /// <summary>Готовит чанк к повторному использованию из пула.</summary>
+        public void ResetForReuse()
+        {
+            System.Array.Clear(_voxels, 0, _voxels.Length);
+            HasBlocks = false;
+            IsEmpty = true;
+
+            if (_mesh != null)
+                _mesh.Clear();
+
+            if (_meshRenderer != null)
+                _meshRenderer.enabled = false;
+
+            if (_meshCollider != null)
+            {
+                _meshCollider.sharedMesh = null;
+                _meshCollider.enabled = false;
+            }
+        }
+
+        /// <summary>Сбрасывает состояние перед возвратом в пул.</summary>
+        public void PrepareForPool()
+        {
+            ResetForReuse();
+            gameObject.SetActive(false);
         }
 
         /// <summary>Локальные координаты 0..31.</summary>
@@ -153,7 +188,15 @@ namespace Voxels
         }
 
         /// <summary>Строит меш: только грани на стыке с воздухом.</summary>
-        public void RebuildMesh(World world)
+        public void RebuildMesh(World world, bool updateCollider = true)
+        {
+            using (VoxelProfiling.ChunkMesh.Auto())
+            {
+                RebuildMeshInternal(world, updateCollider);
+            }
+        }
+
+        void RebuildMeshInternal(World world, bool updateCollider)
         {
             if (!HasBlocks)
             {
@@ -173,9 +216,6 @@ namespace Voxels
                 _triangles[i].Clear();
 
             const int size = VoxelConstants.ChunkSize;
-            int originX = Id.X * size;
-            int originY = Id.Y * size;
-            int originZ = Id.Z * size;
             int solidCount = 0;
 
             for (int x = 0; x < size; x++)
@@ -197,11 +237,7 @@ namespace Voxels
                             int ny = y + direction.y;
                             int nz = z + direction.z;
 
-                            ushort neighbour;
-                            if (nx >= 0 && nx < size && ny >= 0 && ny < size && nz >= 0 && nz < size)
-                                neighbour = this[nx, ny, nz];
-                            else
-                                neighbour = world.GetBlock(originX + nx, originY + ny, originZ + nz);
+                            ushort neighbour = SampleBlock(world, nx, ny, nz);
 
                             // Вода не скрывает грани камня (она прозрачная),
                             // а собственные грани рисует только к воздуху.
@@ -222,7 +258,23 @@ namespace Voxels
             }
 
             IsEmpty = solidCount == 0;
-            UploadMesh();
+            UploadMesh(updateCollider);
+        }
+
+        /// <summary>
+        /// Блок в локальных координатах чанка; за его границей — запрос к миру.
+        /// Такой доступ в разы дешевле world.GetBlock для внутренних граней и AO.
+        /// </summary>
+        ushort SampleBlock(World world, int x, int y, int z)
+        {
+            if ((uint)x < (uint)VoxelConstants.ChunkSize &&
+                (uint)y < (uint)VoxelConstants.ChunkSize &&
+                (uint)z < (uint)VoxelConstants.ChunkSize)
+            {
+                return _voxels[(x * VoxelConstants.ChunkSize + y) * VoxelConstants.ChunkSize + z];
+            }
+
+            return world.GetBlock(_originX + x, _originY + y, _originZ + z);
         }
 
         void AddFace(int face, int x, int y, int z, ushort block, World world)
@@ -251,7 +303,7 @@ namespace Voxels
         /// Классическое вершинное AO: угол затемняется, если рядом с ним есть блоки.
         /// Значение уходит в цвет вершины; его использует Shader Graph блоков.
         /// </summary>
-        static Color32 AoColor(World world, int x, int y, int z, int face, int vertex)
+        Color32 AoColor(World world, int x, int y, int z, int face, int vertex)
         {
             int b = (face * 4 + vertex) * 3;
 
@@ -265,10 +317,10 @@ namespace Voxels
             return new Color32(shade, shade, shade, 255);
         }
 
-        static bool IsSolid(World world, int x, int y, int z)
-            => world.GetBlock(x, y, z) != BlockType.Air;
+        bool IsSolid(World world, int x, int y, int z)
+            => SampleBlock(world, x, y, z) != BlockType.Air;
 
-        void UploadMesh()
+        void UploadMesh(bool updateCollider)
         {
             _mesh.Clear();
             _mesh.indexFormat = IndexFormat.UInt32;
@@ -296,18 +348,34 @@ namespace Voxels
                 _mesh.SetTriangles(_triangles[i], i);
             _mesh.RecalculateBounds();
 
-            Material[] materials = VoxelMaterials.Get();
-            if (materials != null)
-                _meshRenderer.sharedMaterials = materials;
+            if (!_materialsApplied)
+            {
+                Material[] materials = VoxelMaterials.Get();
+                if (materials != null)
+                {
+                    _meshRenderer.sharedMaterials = materials;
+                    _materialsApplied = true;
+                }
+            }
 
             _meshRenderer.enabled = true;
 
             if (_meshCollider != null)
             {
-                // Переприсваиваем, чтобы Unity перезапекала коллайдер после правки блоков.
-                _meshCollider.sharedMesh = null;
-                _meshCollider.sharedMesh = _mesh;
-                _meshCollider.enabled = true;
+                if (!updateCollider)
+                {
+                    // Меш соседней колонки меняется только на стыке: перезапекание
+                    // PhysX-меша здесь стоит дороже, чем точность на одном ребре.
+                    return;
+                }
+
+                using (VoxelProfiling.ColliderBake.Auto())
+                {
+                    // Переприсваиваем, чтобы Unity перезапекала коллайдер после правки блоков.
+                    _meshCollider.sharedMesh = null;
+                    _meshCollider.sharedMesh = _mesh;
+                    _meshCollider.enabled = true;
+                }
             }
         }
     }

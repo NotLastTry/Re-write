@@ -1,0 +1,11 @@
+time_s,stage,event,chunks,columns,pending
+0.741,capture_started,engine_found; awake_at=0.164; first_update_at=0.740,24,6,7
+0.742,stage,streaming,24,6,7
+2.055,streaming_done,pending=0, columns=13,52,13,0
+2.056,stage,steady,52,13,0
+10.064,traversal_start,teleport+256,52,13,0
+10.064,stage,traversal,52,13,0
+14.356,traversal_done,columns=13,52,13,0
+14.357,stage,editing,52,13,0
+14.357,editing_start,x=256, z=0,52,13,0
+19.364,stage,finished,52,13,0

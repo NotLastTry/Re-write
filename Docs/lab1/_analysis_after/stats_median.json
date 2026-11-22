@@ -1,0 +1,133 @@
+{
+  "label": "после оптимизации",
+  "runs": 3,
+  "stages": {
+    "streaming": {
+      "stage": "streaming",
+      "title": "Стартовая загрузка",
+      "frames": 88.0,
+      "duration_s": 1.0430000000000001,
+      "avg_fps": 57.5806194104268,
+      "frame_avg_ms": 17.366954545454547,
+      "frame_p50_ms": 8.333,
+      "frame_p95_ms": 49.52184999999999,
+      "frame_p99_ms": 110.3601699999984,
+      "frame_max_ms": 414.346,
+      "over_16_7_pct": 13.636363636363635,
+      "over_33_3_pct": 9.090909090909092,
+      "columns": 7.0,
+      "chunks_final": 52.0,
+      "gpu_ms_avg": null,
+      "gpu_ms_p95": null,
+      "cpu_main_ms_avg": 10.662977272727273,
+      "cpu_main_ms_p95": 49.50675,
+      "cpu_render_ms_avg": 0.0,
+      "cpu_render_ms_p95": 0.0
+    },
+    "steady": {
+      "stage": "steady",
+      "title": "Спокойный обзор",
+      "frames": 872.0,
+      "duration_s": 7.927,
+      "avg_fps": 109.89437537398113,
+      "frame_avg_ms": 9.099646788990826,
+      "frame_p50_ms": 8.333,
+      "frame_p95_ms": 9.509649999999997,
+      "frame_p99_ms": 28.828649999999996,
+      "frame_max_ms": 31.117,
+      "over_16_7_pct": 3.784403669724771,
+      "over_33_3_pct": 0.0,
+      "columns": 0.0,
+      "chunks_final": 52.0,
+      "gpu_ms_avg": null,
+      "gpu_ms_p95": null,
+      "cpu_main_ms_avg": 1.499373853211009,
+      "cpu_main_ms_p95": 1.461099999999996,
+      "cpu_render_ms_avg": 0.0,
+      "cpu_render_ms_p95": 0.0
+    },
+    "traversal": {
+      "stage": "traversal",
+      "title": "Телепорт 256 блоков",
+      "frames": 333.0,
+      "duration_s": 3.4190000000000005,
+      "avg_fps": 94.45524991072135,
+      "frame_avg_ms": 10.587024024024025,
+      "frame_p50_ms": 8.333,
+      "frame_p95_ms": 29.4664,
+      "frame_p99_ms": 44.710840000000005,
+      "frame_max_ms": 55.056,
+      "over_16_7_pct": 8.108108108108109,
+      "over_33_3_pct": 3.669724770642202,
+      "columns": 11.0,
+      "chunks_final": 52.0,
+      "gpu_ms_avg": null,
+      "gpu_ms_p95": null,
+      "cpu_main_ms_avg": 3.337567567567568,
+      "cpu_main_ms_p95": 29.4538,
+      "cpu_render_ms_avg": 0.0,
+      "cpu_render_ms_p95": 0.0
+    },
+    "editing": {
+      "stage": "editing",
+      "title": "Правка блоков",
+      "frames": 519.0,
+      "duration_s": 4.936000000000002,
+      "avg_fps": 105.03728823732425,
+      "frame_avg_ms": 9.520428571428571,
+      "frame_p50_ms": 8.333,
+      "frame_p95_ms": 25.246199999999995,
+      "frame_p99_ms": 28.484640000000006,
+      "frame_max_ms": 30.052,
+      "over_16_7_pct": 5.598455598455598,
+      "over_33_3_pct": 0.0,
+      "columns": 0.0,
+      "chunks_final": 52.0,
+      "gpu_ms_avg": null,
+      "gpu_ms_p95": null,
+      "cpu_main_ms_avg": 2.7043992248062017,
+      "cpu_main_ms_p95": 25.2456,
+      "cpu_render_ms_avg": 0.0,
+      "cpu_render_ms_p95": 0.0
+    }
+  },
+  "markers": {
+    "streaming": {
+      "columns": 7.0,
+      "per_column_ms": {
+        "Voxels.Column": 50.41431428571428,
+        "Voxels.Terrain": 4.8306571428571425,
+        "Voxels.Fill": 0.0,
+        "Voxels.Caves": 3.566514285714286,
+        "Voxels.Structures": 1.3061571428571426,
+        "Voxels.ChunkMesh": 38.977057142857134,
+        "Voxels.NeighbourRemesh": 14.616942857142858,
+        "Voxels.ColliderBake": 2.2460142857142853
+      }
+    },
+    "traversal": {
+      "columns": 11.0,
+      "per_column_ms": {
+        "Voxels.Column": 46.36981818181818,
+        "Voxels.Terrain": 3.9534272727272723,
+        "Voxels.Fill": 0.0,
+        "Voxels.Caves": 3.634963636363636,
+        "Voxels.Structures": 1.6383454545454545,
+        "Voxels.ChunkMesh": 36.89665454545454,
+        "Voxels.NeighbourRemesh": 11.834445454545454,
+        "Voxels.ColliderBake": 2.3194363636363637
+      }
+    }
+  },
+  "gc_mb": {
+    "streaming": 30.366297,
+    "steady": 4.63312,
+    "traversal": 27.121494,
+    "editing": 2.772564
+  },
+  "sources": [
+    "C:\\Addons\\Work\\Unity\\Projects\\Re-write\\Docs\\lab1\\captures\\after\\run1",
+    "C:\\Addons\\Work\\Unity\\Projects\\Re-write\\Docs\\lab1\\captures\\after\\run2",
+    "C:\\Addons\\Work\\Unity\\Projects\\Re-write\\Docs\\lab1\\captures\\after\\run3"
+  ]
+}

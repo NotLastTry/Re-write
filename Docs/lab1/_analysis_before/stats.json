@@ -1,0 +1,146 @@
+{
+  "label": "до оптимизации",
+  "meta": {
+    "frame_timing_lag": 4,
+    "startup_frame_ms": 2709.295,
+    "startup_time_s": 3.297
+  },
+  "stages": [
+    {
+      "stage": "streaming",
+      "title": "Стартовая загрузка",
+      "frames": 277,
+      "duration_s": 1.2119999999999997,
+      "avg_fps": 109.64078985699989,
+      "frame_avg_ms": 9.120693140794225,
+      "frame_p50_ms": 2.536,
+      "frame_p95_ms": 4.6066,
+      "frame_p99_ms": 78.98348000000003,
+      "frame_max_ms": 1228.531,
+      "over_16_7_pct": 2.888086642599278,
+      "over_33_3_pct": 2.888086642599278,
+      "columns": 7,
+      "chunks_final": 52,
+      "gpu_ms_avg": 2.595745098039216,
+      "gpu_ms_p95": 4.14645,
+      "cpu_main_ms_avg": 4.207259927797834,
+      "cpu_main_ms_p95": 3.7985999999999995,
+      "cpu_render_ms_avg": 1.2049999999999998,
+      "cpu_render_ms_p95": 2.0593999999999997
+    },
+    {
+      "stage": "steady",
+      "title": "Спокойный обзор",
+      "frames": 3208,
+      "duration_s": 7.716000000000001,
+      "avg_fps": 415.6151590187906,
+      "frame_avg_ms": 2.406072007481297,
+      "frame_p50_ms": 2.3055000000000003,
+      "frame_p95_ms": 3.3066499999999994,
+      "frame_p99_ms": 3.7564399999999987,
+      "frame_max_ms": 5.648,
+      "over_16_7_pct": 0.0,
+      "over_33_3_pct": 0.0,
+      "columns": 0,
+      "chunks_final": 52,
+      "gpu_ms_avg": 2.1737004573170733,
+      "gpu_ms_p95": 3.2345499999999996,
+      "cpu_main_ms_avg": 2.084443578553616,
+      "cpu_main_ms_p95": 2.682899999999998,
+      "cpu_render_ms_avg": 1.0923329177057357,
+      "cpu_render_ms_p95": 1.602
+    },
+    {
+      "stage": "traversal",
+      "title": "Телепорт 256 блоков",
+      "frames": 1136,
+      "duration_s": 2.8039999999999985,
+      "avg_fps": 404.70526875671766,
+      "frame_avg_ms": 2.4709339788732394,
+      "frame_p50_ms": 2.3985000000000003,
+      "frame_p95_ms": 3.17925,
+      "frame_p99_ms": 3.4728000000000008,
+      "frame_max_ms": 4.575,
+      "over_16_7_pct": 0.0,
+      "over_33_3_pct": 0.0,
+      "columns": 0,
+      "chunks_final": 52,
+      "gpu_ms_avg": 2.409545774647887,
+      "gpu_ms_p95": 3.157,
+      "cpu_main_ms_avg": 2.082674295774648,
+      "cpu_main_ms_p95": 2.64525,
+      "cpu_render_ms_avg": 1.069399647887324,
+      "cpu_render_ms_p95": 1.4945
+    },
+    {
+      "stage": "editing",
+      "title": "Правка блоков",
+      "frames": 1221,
+      "duration_s": 4.588999999999999,
+      "avg_fps": 265.8265300102041,
+      "frame_avg_ms": 3.761851760851761,
+      "frame_p50_ms": 3.655,
+      "frame_p95_ms": 4.55,
+      "frame_p99_ms": 9.813599999999997,
+      "frame_max_ms": 11.989,
+      "over_16_7_pct": 0.0,
+      "over_33_3_pct": 0.0,
+      "columns": 0,
+      "chunks_final": 52,
+      "gpu_ms_avg": 3.492759634888438,
+      "gpu_ms_p95": 4.30025,
+      "cpu_main_ms_avg": 2.434925287356322,
+      "cpu_main_ms_p95": 3.3192999999999997,
+      "cpu_render_ms_avg": 1.2833423645320197,
+      "cpu_render_ms_p95": 1.8264499999999997
+    }
+  ],
+  "markers": {
+    "streaming": {
+      "columns": 7,
+      "per_column_ms": {
+        "Voxels.Column": 74.07927142857143,
+        "Voxels.Terrain": 4.838099999999999,
+        "Voxels.Fill": 0.0,
+        "Voxels.Caves": 3.3875428571428574,
+        "Voxels.Structures": 38.38062857142857,
+        "Voxels.ChunkMesh": 26.8663,
+        "Voxels.NeighbourRemesh": 14.299985714285713,
+        "Voxels.ColliderBake": 4.6531
+      },
+      "total_ms": {
+        "Voxels.Column": 518.5549,
+        "Voxels.Terrain": 33.866699999999994,
+        "Voxels.Fill": 0.0,
+        "Voxels.Caves": 23.7128,
+        "Voxels.Structures": 268.6644,
+        "Voxels.ChunkMesh": 188.0641,
+        "Voxels.NeighbourRemesh": 100.09989999999999,
+        "Voxels.ColliderBake": 32.5717
+      }
+    },
+    "traversal": {
+      "columns": 0,
+      "per_column_ms": {
+        "Voxels.Column": 0.0,
+        "Voxels.Terrain": 0.0,
+        "Voxels.Fill": 0.0,
+        "Voxels.Caves": 0.0,
+        "Voxels.Structures": 0.0,
+        "Voxels.ChunkMesh": 0.0,
+        "Voxels.NeighbourRemesh": 0.0,
+        "Voxels.ColliderBake": 0.0
+      },
+      "total_ms": {
+        "Voxels.Column": 0.0,
+        "Voxels.Terrain": 0.0,
+        "Voxels.Fill": 0.0,
+        "Voxels.Caves": 0.0,
+        "Voxels.Structures": 0.0,
+        "Voxels.ChunkMesh": 0.0,
+        "Voxels.NeighbourRemesh": 0.0,
+        "Voxels.ColliderBake": 0.0
+      }
+    }
+  }
+}

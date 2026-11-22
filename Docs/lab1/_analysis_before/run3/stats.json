@@ -1,0 +1,146 @@
+{
+  "label": "до, прогон 3",
+  "meta": {
+    "frame_timing_lag": 3,
+    "startup_frame_ms": 187.171,
+    "startup_time_s": 0.742
+  },
+  "stages": [
+    {
+      "stage": "streaming",
+      "title": "Стартовая загрузка",
+      "frames": 84,
+      "duration_s": 1.2020000000000002,
+      "avg_fps": 45.36536127839588,
+      "frame_avg_ms": 22.04325,
+      "frame_p50_ms": 8.334,
+      "frame_p95_ms": 75.37764999999999,
+      "frame_p99_ms": 167.06674000000083,
+      "frame_max_ms": 567.062,
+      "over_16_7_pct": 15.476190476190476,
+      "over_33_3_pct": 10.714285714285714,
+      "columns": 7,
+      "chunks_final": 52,
+      "gpu_ms_avg": null,
+      "gpu_ms_p95": null,
+      "cpu_main_ms_avg": 15.481107142857143,
+      "cpu_main_ms_p95": 75.36989999999999,
+      "cpu_render_ms_avg": 0.0,
+      "cpu_render_ms_p95": 0.0
+    },
+    {
+      "stage": "steady",
+      "title": "Спокойный обзор",
+      "frames": 811,
+      "duration_s": 7.926,
+      "avg_fps": 102.21124127045421,
+      "frame_avg_ms": 9.783659679408139,
+      "frame_p50_ms": 8.333,
+      "frame_p95_ms": 29.1035,
+      "frame_p99_ms": 30.871499999999997,
+      "frame_max_ms": 33.906,
+      "over_16_7_pct": 6.658446362515413,
+      "over_33_3_pct": 0.12330456226880394,
+      "columns": 0,
+      "chunks_final": 52,
+      "gpu_ms_avg": null,
+      "gpu_ms_p95": null,
+      "cpu_main_ms_avg": 2.4272836004932183,
+      "cpu_main_ms_p95": 29.084000000000003,
+      "cpu_render_ms_avg": 0.0,
+      "cpu_render_ms_p95": 0.0
+    },
+    {
+      "stage": "traversal",
+      "title": "Телепорт 256 блоков",
+      "frames": 321,
+      "duration_s": 3.6959999999999997,
+      "avg_fps": 83.33214349223985,
+      "frame_avg_ms": 12.000171339563863,
+      "frame_p50_ms": 8.333,
+      "frame_p95_ms": 30.775,
+      "frame_p99_ms": 74.88040000000001,
+      "frame_max_ms": 84.602,
+      "over_16_7_pct": 9.657320872274143,
+      "over_33_3_pct": 3.7383177570093453,
+      "columns": 11,
+      "chunks_final": 52,
+      "gpu_ms_avg": null,
+      "gpu_ms_p95": null,
+      "cpu_main_ms_avg": 4.8813551401869155,
+      "cpu_main_ms_p95": 30.763,
+      "cpu_render_ms_avg": 0.0,
+      "cpu_render_ms_p95": 0.0
+    },
+    {
+      "stage": "editing",
+      "title": "Правка блоков",
+      "frames": 509,
+      "duration_s": 4.936000000000002,
+      "avg_fps": 102.94559921720894,
+      "frame_avg_ms": 9.71386836935167,
+      "frame_p50_ms": 8.333,
+      "frame_p95_ms": 27.26479999999998,
+      "frame_p99_ms": 30.35984,
+      "frame_max_ms": 31.523,
+      "over_16_7_pct": 6.4833005893909625,
+      "over_33_3_pct": 0.0,
+      "columns": 0,
+      "chunks_final": 52,
+      "gpu_ms_avg": null,
+      "gpu_ms_p95": null,
+      "cpu_main_ms_avg": 2.906936883629191,
+      "cpu_main_ms_p95": 26.8691,
+      "cpu_render_ms_avg": 0.0,
+      "cpu_render_ms_p95": 0.0
+    }
+  ],
+  "markers": {
+    "streaming": {
+      "columns": 7,
+      "per_column_ms": {
+        "Voxels.Column": 75.33291428571428,
+        "Voxels.Terrain": 4.212628571428572,
+        "Voxels.Fill": 0.0,
+        "Voxels.Caves": 4.154585714285714,
+        "Voxels.Structures": 38.375571428571426,
+        "Voxels.ChunkMesh": 28.003314285714282,
+        "Voxels.NeighbourRemesh": 15.00527142857143,
+        "Voxels.ColliderBake": 4.742285714285714
+      },
+      "total_ms": {
+        "Voxels.Column": 527.3303999999999,
+        "Voxels.Terrain": 29.4884,
+        "Voxels.Fill": 0.0,
+        "Voxels.Caves": 29.082099999999997,
+        "Voxels.Structures": 268.62899999999996,
+        "Voxels.ChunkMesh": 196.02319999999997,
+        "Voxels.NeighbourRemesh": 105.0369,
+        "Voxels.ColliderBake": 33.196
+      }
+    },
+    "traversal": {
+      "columns": 11,
+      "per_column_ms": {
+        "Voxels.Column": 77.01831818181817,
+        "Voxels.Terrain": 3.698009090909091,
+        "Voxels.Fill": 0.0,
+        "Voxels.Caves": 3.8118363636363637,
+        "Voxels.Structures": 40.15174545454545,
+        "Voxels.ChunkMesh": 28.683572727272725,
+        "Voxels.NeighbourRemesh": 14.809781818181818,
+        "Voxels.ColliderBake": 6.399127272727273
+      },
+      "total_ms": {
+        "Voxels.Column": 847.2014999999999,
+        "Voxels.Terrain": 40.6781,
+        "Voxels.Fill": 0.0,
+        "Voxels.Caves": 41.9302,
+        "Voxels.Structures": 441.66919999999993,
+        "Voxels.ChunkMesh": 315.5193,
+        "Voxels.NeighbourRemesh": 162.9076,
+        "Voxels.ColliderBake": 70.3904
+      }
+    }
+  }
+}

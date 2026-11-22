@@ -1,0 +1,52 @@
+PerfCapture summary
+output: C:\Addons\Work\Unity\Projects\Re-write\Docs\lab1\captures\before\run1
+scene: TestScene
+unity: 6000.5.9f1
+raw: -
+awake_s: 0.170
+first_update_s: 0.746
+stage=streaming frames=89 duration_s=2.057 avg_fps=43.26 frame_ms_avg=23.116 p50=8.333 p95=77.845 p99=182.895 max=577.357
+stage=steady frames=809 duration_s=8.004 avg_fps=101.07 frame_ms_avg=9.894 p50=8.333 p95=29.014 p99=30.538 max=154.353
+stage=traversal frames=326 duration_s=4.248 avg_fps=76.75 frame_ms_avg=13.030 p50=8.333 p95=30.111 p99=75.735 max=334.704
+stage=editing frames=513 duration_s=5.001 avg_fps=102.57 frame_ms_avg=9.749 p50=8.333 p95=28.048 p99=30.121 max=44.187
+stage=finished frames=1 duration_s=0.008 avg_fps=120.00 frame_ms_avg=8.334 p50=8.334 p95=8.334 p99=8.334 max=8.334
+columns_created: 25
+chunks_final: 52
+counters: 37
+counter: System Total Used Memory | category=Memory | unit=Bytes | type=Int64
+counter: Total Used Memory | category=Memory | unit=Bytes | type=Int64
+counter: GC Allocated In Frame | category=Memory | unit=Bytes | type=Int64
+counter: Physics Used Memory (2D) | category=Memory | unit=Bytes | type=Int64
+counter: Physics Used Memory | category=Memory | unit=Bytes | type=Int64
+counter: Physics Queries | category=Physics | unit=Count | type=Int32
+counter: Standard Draw Calls Count | category=Render | unit=Undefined | type=Int32
+counter: Standard Indirect Draw Calls Count | category=Render | unit=Undefined | type=Int32
+counter: Standard Instanced Draw Calls Count | category=Render | unit=Undefined | type=Int32
+counter: SRP Batcher Draw Calls Count | category=Render | unit=Undefined | type=Int32
+counter: BRG Draw Calls Count | category=Render | unit=Undefined | type=Int32
+counter: BRG Indirect Draw Calls Count | category=Render | unit=Undefined | type=Int32
+counter: Null Geometry Draw Calls Count | category=Render | unit=Undefined | type=Int32
+counter: Null Geometry Indirect Draw Calls Count | category=Render | unit=Undefined | type=Int32
+counter: Triangles Count | category=Render | unit=Count | type=Int64
+counter: SetPass Calls Count | category=Render | unit=Count | type=Int32
+counter: Dynamic Batches Count | category=Render | unit=Count | type=Int32
+counter: Dynamic Batched Draw Calls Count | category=Render | unit=Count | type=Int32
+counter: Dynamic Batched Triangles Count | category=Render | unit=Count | type=Int64
+counter: Static Batches Count | category=Render | unit=Count | type=Int32
+counter: Static Batched Draw Calls Count | category=Render | unit=Count | type=Int32
+counter: Static Batched Triangles Count | category=Render | unit=Count | type=Int64
+counter: Instanced Batches Count | category=Render | unit=Count | type=Int32
+counter: Instanced Batched Draw Calls Count | category=Render | unit=Count | type=Int32
+counter: Instanced Batched Triangles Count | category=Render | unit=Count | type=Int64
+counter: CPU Main Thread Frame Time | category=Render | unit=TimeNanoseconds | type=Double
+counter: CPU Render Thread Frame Time | category=Render | unit=TimeNanoseconds | type=Double
+counter: GPU Frame Time | category=Render | unit=TimeNanoseconds | type=Double
+counter: Voxels.Column | category=Scripts | unit=TimeNanoseconds | type=Int64
+counter: Voxels.Terrain | category=Scripts | unit=TimeNanoseconds | type=Int64
+counter: Voxels.Fill | category=Scripts | unit=TimeNanoseconds | type=Int64
+counter: Voxels.Caves | category=Scripts | unit=TimeNanoseconds | type=Int64
+counter: Voxels.Structures | category=Scripts | unit=TimeNanoseconds | type=Int64
+counter: Voxels.ChunkMesh | category=Scripts | unit=TimeNanoseconds | type=Int64
+counter: Voxels.NeighbourRemesh | category=Scripts | unit=TimeNanoseconds | type=Int64
+counter: Voxels.ColliderBake | category=Scripts | unit=TimeNanoseconds | type=Int64
+counter: Assembly-CSharp.dll!Voxels.Profiling::PerfCaptureRunner.Update() [Invoke] | category=Scripts | unit=TimeNanoseconds | type=Int64
